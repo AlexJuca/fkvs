@@ -1,0 +1,15 @@
+.git
+.gitignore
+build.log
+CMake*
+CMakeFiles/
+CmakeLists.txt
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+fkvs.conf
+client.conf
+fkvs.dir
+CmakeFiles
+fkvs
+fkvs-cli
