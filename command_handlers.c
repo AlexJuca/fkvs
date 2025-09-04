@@ -78,10 +78,13 @@ void handle_set_command(int client_fd, unsigned char *buffer, size_t bytes_read)
         return;
     }
 
-    const unsigned char *key   = &buffer[pos_key];
-    const unsigned char *value = &buffer[pos_value];
+    char *data = malloc(value_len + 1);
+    memcpy(data, &buffer[pos_value], value_len);
 
-    set_value(table, key, key_len, value, value_len);
+    printf("Wrote value '%s' to database \n", data);
+    printf("Wrote %d bytes to database \n", value_len);
+
+    set_value(table, &buffer[pos_key], key_len, &buffer[pos_value], value_len);
 
     send_ok(client_fd);
 }
@@ -91,26 +94,31 @@ void handle_get_command(int client_fd, unsigned char* buffer, size_t bytes_read)
     size_t command_len = buffer[0] << 8 | buffer[1]; 
     
     size_t key_len = buffer[3] << 8 | buffer[4];
-    printf("command key length: %d \n", (int) key_len);
+
     if (bytes_read-2 == command_len) {
         unsigned char* value;
         size_t value_len;
-        if (get_value(table, &buffer[4], key_len, &value, &value_len)) {
+        if (get_value(table, &buffer[5], key_len, &value, &value_len)) {
             // Construct a response: status, length (2 bytes), and value.
-            unsigned char status = STATUS_SUCCESS;
-            unsigned char len_high = (value_len >> 8) & 0xFF;
-            unsigned char len_low = value_len & 0xFF;
+            // unsigned char status = STATUS_SUCCESS;
+            // unsigned char len_high = (value_len >> 8) & 0xFF;
+            // unsigned char len_low = value_len & 0xFF;
+            //
+            // // Allocate memory for response
+            // unsigned char* response = malloc(1 + 2 + value_len);
+            // response[0] = status;
+            // response[1] = len_high;
+            // response[2] = len_low;
+            // memcpy(&response[3], value, value_len);
+            //
+            // send(client_fd, response, 3 + value_len, 0);
 
-            // Allocate memory for response
-            unsigned char* response = malloc(1 + 2 + value_len);
-            response[0] = status;
-            response[1] = len_high;
-            response[2] = len_low;
-            memcpy(&response[3], value, value_len);
-
-            send(client_fd, response, 3 + value_len, 0);
-            free(response);
-            free(value);
+            char *data = malloc(value_len);
+            memcpy(data, value, value_len);
+            printf("Read value '%s' from database \n", data);
+            send_ok(client_fd);
+            free(data);
+            // free(value);
         } else {
             send_error(client_fd);
         }

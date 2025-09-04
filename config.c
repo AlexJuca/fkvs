@@ -14,9 +14,8 @@ server_t loadServerConfig(char *path) {
   }
 
   server_t server;
-  // DEFINE DEFAULT VALUES
   server.numClients = 0;
-  // END OF DEFAULT VALUES;
+
   char line[1024];
 
   while (fgets(line, sizeof(line), config)) {

@@ -1,8 +1,9 @@
 #include "client.h"
+#include "command_parser.h"
 #include "config.h"
 #include "network.c"
-#include "command_parser.h"
 #include "response_defs.h"
+#include "utils.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,10 +18,7 @@ void run_repl(client_t client) {
             break;
         }
 
-        // Remove newline character
         command[strcspn(command, "\n")] = 0;
-
-        // Exit the loop on 'exit'
         if (strcmp(command, "exit") == 0) {
             break;
         }
@@ -69,7 +67,6 @@ void run_repl(client_t client) {
             continue;
         }
 
-        // Receive and interpret server response
         int bytes_received = recv(client.fd, client.buffer, BUFFER_SIZE - 1, 0);
         if (bytes_received > 0) {
             const unsigned char status = client.buffer[0];
@@ -83,10 +80,10 @@ void run_repl(client_t client) {
                     // printf("\n");
                     printf("OK>\n");
                 } else {
-                    printf("OK> No additional data\n");
+                    printf("OK> No additional data in reply.\n");
                 }
             } else {
-                printf("Failed>\n");
+                fprintf(stderr, "Failed> \n");
             }
         }
     }
@@ -95,9 +92,9 @@ void run_repl(client_t client) {
 int main(int argc, char *argv[]) {
     client_t client = loadClientConfig(NULL);
 
-    int client_fd = start_client(&client);
+    const int client_fd = start_client(&client);
     if (client_fd == -1) {
-        fprintf(stderr, "Failed to connect to server\n");
+        ERROR_AND_EXIT("Failed to connect to server");
         return 1;
     }
 

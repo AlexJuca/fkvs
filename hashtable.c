@@ -18,7 +18,6 @@ HashTable* create_hash_table(size_t size) {
     return table;
 }
 
-// Free the hash table
 void free_hash_table(HashTable* table) {
     for (size_t i = 0; i < table->size; i++) {
         HashTableEntry* entry = table->buckets[i];
@@ -34,7 +33,6 @@ void free_hash_table(HashTable* table) {
     free(table);
 }
 
-// Set a key-value pair in the hash table
 bool set_value(HashTable* table, unsigned char* key, size_t key_len, unsigned char* value, size_t value_len) {
     size_t index = hash_function(key, key_len, table->size);
     HashTableEntry* current = table->buckets[index];
@@ -59,18 +57,25 @@ bool set_value(HashTable* table, unsigned char* key, size_t key_len, unsigned ch
     return true;
 }
 
-// Retrieve a value from the hash table
-bool get_value(HashTable* table, unsigned char* key, size_t key_len, unsigned char** value, size_t* value_len) {
+bool get_value(HashTable* table,unsigned char* key, size_t key_len, unsigned char** value, size_t* value_len) {
+    if (!table || !key || !value || !value_len) return false;
+
     size_t index = hash_function(key, key_len, table->size);
-    HashTableEntry* current = table->buckets[index];
-    while (current != NULL) {
+    for (HashTableEntry* current = table->buckets[index]; current; current = current->next) {
         if (current->key_len == key_len && memcmp(current->key, key, key_len) == 0) {
-            *value = malloc(current->value_len);
-            memcpy(*value, current->value, current->value_len);
+            unsigned char* out = malloc(current->value_len);
+            if (!out) return false; // allocation failed
+
+            memcpy(out, current->value, current->value_len);
+            *value = out;
             *value_len = current->value_len;
             return true;
         }
-        current = current->next;
     }
+
+    // not found
+    *value = NULL;
+    *value_len = 0;
     return false;
 }
+

@@ -25,7 +25,7 @@ struct server_t server;
 int SERVER_FD = -1;
 int EPOLL_KQQUEUE_FD = -1;
 
-void showLogo() {
+void show_logo() {
   FILE *f = fopen("logo.txt",  "r");
   char line[256];
   
@@ -146,7 +146,7 @@ int main(int argc, char *argv[]) {
   } else {
     
     if (server.showLogo && !server.daemonize) {
-      showLogo();
+      show_logo();
     }
 
     LOG("Server starting");
@@ -167,10 +167,8 @@ int main(int argc, char *argv[]) {
     exit(EXIT_FAILURE);
   }
 
-  // Initialize the hash table
-  HashTable* ht = create_hash_table(4000000000);
-  
-  // Initialize command handlers with hash table
+  HashTable* ht = create_hash_table(4096);
+
   init_command_handlers(ht);
   
   EPOLL_KQQUEUE_FD = run_event_loop(SERVER_FD);
