@@ -91,7 +91,7 @@ client_t loadClientConfig(char *path) {
   while(fgets(line, sizeof(line), config)) {
     if (line[0] == '#' || line[0] == '\0') continue;
 
-    char key[512];
+    char key[256];
     char value[512];
 
     sscanf(line, "%s %s", key, value);
@@ -107,7 +107,7 @@ client_t loadClientConfig(char *path) {
     if (strcmp(key, "verbose") == 0) {
       client.verbose = true;
     }
-  } 
+  }
 
   return client;
 }

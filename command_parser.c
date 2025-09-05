@@ -30,8 +30,6 @@ unsigned char* construct_set_command(const char* key, const char* value, size_t*
     binary_cmd[pos + 1] = value_len & 0xFF;
     memcpy(&binary_cmd[pos + 2], value, value_len);
 
-    print_binary_data(binary_cmd, *command_len);
-
     return binary_cmd;
 }
 
@@ -47,13 +45,10 @@ unsigned char* construct_get_command(const char* key, size_t* command_len) {
 
     binary_cmd[0] = (core_cmd_len >> 8) & 0xFF;
     binary_cmd[1] = core_cmd_len & 0xFF;
-
     binary_cmd[2] = CMD_GET;
     binary_cmd[3] = (key_len >> 8) & 0xFF;
     binary_cmd[4] = key_len & 0xFF;
     memcpy(&binary_cmd[5], key, key_len);
-
-    print_binary_data(binary_cmd, *command_len);
 
     return binary_cmd;
 }

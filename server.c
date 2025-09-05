@@ -167,7 +167,7 @@ int main(int argc, char *argv[]) {
     exit(EXIT_FAILURE);
   }
 
-  HashTable* ht = create_hash_table(4096);
+  HashTable* ht = create_hash_table(8092);
 
   init_command_handlers(ht);
   

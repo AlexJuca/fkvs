@@ -8,6 +8,33 @@
 #include <stdlib.h>
 #include <string.h>
 
+bool print_reply_from_frame(const unsigned char *frame, size_t frame_len) {
+    if (frame_len < 5) return false; // need at least len(2)+status(1)+plen(2)
+
+    uint16_t body_len = (uint16_t)((frame[0] << 8) | frame[1]);
+    if (frame_len != (size_t)body_len + 2) return false;
+
+    const unsigned char *body = frame + 2;
+    unsigned char status = body[0];
+    uint16_t payload_len = (uint16_t)((body[1] << 8) | body[2]);
+
+    if (body_len != (size_t)(1 + 2 + payload_len)) return false;
+
+    const unsigned char *payload = body + 3;
+
+    // Output as requested
+    printf("Read %u byte%s\n", (unsigned)payload_len, payload_len == 1 ? "" : "s");
+    if (status == STATUS_SUCCESS) {
+        printf("Ok>");
+    } else {
+        printf("Err%u>", (unsigned)status);
+    }
+    fwrite(payload, 1, payload_len, stdout);
+    putchar('\n');
+
+    return true;
+}
+
 void run_repl(client_t client) {
     char command[BUFFER_SIZE];
 
@@ -37,7 +64,6 @@ void run_repl(client_t client) {
             }
 
             size_t cmd_len;
-            printf("key: %s value: %s %d \n", key, value, (int) cmd_len);
             unsigned char *binary_cmd = construct_set_command(key, value, &cmd_len);
             if (binary_cmd == NULL) {
                 fprintf(stderr, "Failed to construct SET command\n");
@@ -69,25 +95,23 @@ void run_repl(client_t client) {
 
         int bytes_received = recv(client.fd, client.buffer, BUFFER_SIZE - 1, 0);
         if (bytes_received > 0) {
-            const unsigned char status = client.buffer[0];
-            if (status == STATUS_SUCCESS) {
-                if (bytes_received > 2) {
-                    // TODO: Ensure server response is structured, so we can
-                    // send both status, data and the number of bytes written
-                    // size_t len = (client.buffer[1] << 8) | client.buffer[2];
-                    // printf("Success; Length: %zu; Data: ", len);
-                    // fwrite(&client.buffer[3], 2, len, stdout);
-                    // printf("\n");
-                    printf("OK>\n");
-                } else {
-                    printf("OK> No additional data in reply.\n");
+            if (bytes_received >= 2) {
+                uint16_t core_len = ((uint16_t)client.buffer[0] << 8) | client.buffer[1];
+                if (bytes_received > core_len) {
+                    printf("Bytes read: %u\n", bytes_received);
+                    const size_t value_len = client.buffer[3] << 8 | client.buffer[4];
+                    char *data = malloc(value_len + 1);
+                    memcpy(data, &client.buffer[5], value_len);
+                    printf("Ok> %s \n", data);
                 }
             } else {
-                fprintf(stderr, "Failed> \n");
+                printf("OK> \n");
             }
         }
     }
 }
+
+
 
 int main(int argc, char *argv[]) {
     client_t client = loadClientConfig(NULL);

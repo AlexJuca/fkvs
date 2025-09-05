@@ -85,7 +85,6 @@ static void try_process_frames(client_t *c) {
 
         if (server.verbose) {
             printf("Complete frame (%zu bytes) from fd=%d\n", frame_len, c->fd);
-            print_binary_data(c->buffer, frame_len);
         }
 
         // Dispatch exactly one frame.
@@ -149,7 +148,7 @@ int run_event_loop(int server_fd) {
                     set_nonblocking(cfd);
                     set_tcp_no_delay(cfd);
 
-                    // We probably want to move the client construction out of here, since this is
+                    // TODO: We probably want to move the client construction out of here, since this is
                     // not the direct responsibility of the event loop.
                     client_t *c = (client_t *)calloc(1, sizeof(*c));
                     if (!c) {
@@ -233,7 +232,6 @@ int run_event_loop(int server_fd) {
                         printf("fd=%d read %zd bytes (buf_used=%zu)\n",
                                c->fd, nread, c->buf_used);
                     }
-                    print_binary_data(c->buffer, nread);
 
                     // Process all complete frames currently in buffer
                     try_process_frames(c);
