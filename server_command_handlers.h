@@ -12,4 +12,6 @@ void handle_set_command(int client_fd, unsigned char* buffer, size_t bytes_read)
 // Command handler for GET command
 void handle_get_command(int client_fd, unsigned char* buffer, size_t bytes_read);
 
+void handle_incr_command(int client_fd, unsigned char* buffer, size_t bytes_read);
+
 #endif // COMMAND_HANDLERS_H

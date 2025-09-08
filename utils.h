@@ -2,19 +2,23 @@
 #define UTILS_H
 
 #include "server.h"
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 
 extern server_t server;
 
-static inline void error_and_exit(char *ctx, const char *file, int line) {
+#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
+
+static void error_and_exit(const char *ctx, const char *file,
+                                  const int line) {
   fprintf(stderr, "[%s - %d]\n", file, line); 
   perror(ctx);
   exit(EXIT_FAILURE);
 }
 
-static inline void warn(char *ctx, const char *file, int line) {
+static void warn(char *ctx, const char *file, int line) {
   fprintf(stderr, "[%s - %d]\n", file, line);
   perror(ctx);
 }
@@ -25,7 +29,7 @@ static inline void append_to_log_file(char *ctx) {
     
 }
 
-static inline void log_std_out(char *ctx) {
+static void log_std_out(char *ctx) {
   time_t ct = time(NULL);
   char ts[32];
 
@@ -34,11 +38,11 @@ static inline void log_std_out(char *ctx) {
   fprintf(stdout, "%s - %s \n", ts, ctx);
 }
 
-static inline void log(char *ctx) {
+static void log(char *ctx) {
   server.daemonize ? append_to_log_file(ctx) : log_std_out(ctx);
 }
 
-void inline print_binary_data(unsigned char* data, size_t len) {
+void inline print_binary_data(const unsigned char* data, const size_t len) {
     for (size_t j = 0; j < len; j++) {
         unsigned char c = data[j];
         if (c >= 32 && c <= 126) {
@@ -49,6 +53,43 @@ void inline print_binary_data(unsigned char* data, size_t len) {
     }
     putchar('\n');
 }
+
+inline bool is_integer(const unsigned char *str, size_t len) {
+    if (len == 0) {
+        return false;
+    }
+
+    size_t i = 0;
+
+    if (str[0] == '+' || str[0] == '-') {
+        i = 1;
+        // If only the sign is present, it's invalid
+        if (i >= len) {
+            return false;
+        }
+    }
+
+    for (; i < len; i++) {
+        if (str[i] < '0' || str[i] > '9') {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+inline char * int_to_string(const uint64_t number) {
+    printf("number: %llu \n", number);
+    char* buffer = malloc(22 * sizeof(char));
+    if (buffer == NULL) {
+        return NULL;
+    }
+
+    snprintf(buffer, 22, "%" PRIu64, number);
+    printf("number: %s \n", buffer);
+    return buffer;
+}
+
 
 #define LOG(ctx) log(ctx)
 #define ERROR_AND_EXIT(ctx) error_and_exit((ctx), __FILE__, __LINE__)

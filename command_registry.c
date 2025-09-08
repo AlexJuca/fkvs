@@ -9,7 +9,7 @@
 
 static CommandHandler command_handlers[MAX_COMMANDS] = {0};
 
-void register_command(uint8_t command_id, CommandHandler handler) {
+void register_command(const uint8_t command_id, const CommandHandler handler) {
     if (command_id < MAX_COMMANDS) {
         command_handlers[command_id] = handler;
     } else {
@@ -17,14 +17,14 @@ void register_command(uint8_t command_id, CommandHandler handler) {
     }
 }
 
-void dispatch_command(int client_fd, unsigned char *buffer,
+void dispatch_command(const int client_fd, unsigned char *buffer,
                       const size_t bytes_read) {
     if (bytes_read < 1) {
         fprintf(stderr, "Buffer too short for command dispatching\n");
         return;
     }
 
-    uint8_t command_id = buffer[2];
+    const uint8_t command_id = buffer[2];
     if (command_handlers[command_id] != NULL) {
         command_handlers[command_id](client_fd, buffer, bytes_read);
     } else {
@@ -32,17 +32,17 @@ void dispatch_command(int client_fd, unsigned char *buffer,
     }
 }
 
-void send_ok(int client_fd) {
+void send_ok(const int client_fd) {
     const unsigned char ok[] = { STATUS_SUCCESS };
     send(client_fd, ok, sizeof ok, 0);
 }
 
-void send_error(int client_fd) {
+void send_error(const int client_fd) {
     const unsigned char error[] = { STATUS_FAILURE };
     send(client_fd, error, sizeof error, 0);
 }
 
-void send_reply(int client_fd, unsigned char *buffer, size_t bytes_read) {
+void send_reply(const int client_fd, const unsigned char *buffer, size_t bytes_read) {
     const size_t core_cmd_len = bytes_read + 3;
     const size_t full_frame_length = core_cmd_len + 2;
 

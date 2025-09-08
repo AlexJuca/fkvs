@@ -1,8 +1,10 @@
-#include "command_handlers.h"
 #include "command_defs.h"
 #include "command_registry.h"
 #include "hashtable.h"
 #include "response_defs.h"
+#include "server_command_handlers.h"
+#include "utils.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/socket.h>
@@ -13,6 +15,7 @@ void init_command_handlers(HashTable* ht) {
     table = ht;
     register_command(CMD_SET, handle_set_command);
     register_command(CMD_GET, handle_get_command);
+    register_command(CMD_INCR, handle_incr_command);
 }
 
 void handle_set_command(int client_fd, unsigned char *buffer, size_t bytes_read) {
@@ -100,6 +103,45 @@ void handle_get_command(int client_fd, unsigned char* buffer, size_t bytes_read)
         size_t value_len;
         if (get_value(table, &buffer[5], key_len, &value, &value_len)) {
             send_reply(client_fd, value, value_len);
+            free(value);
+        } else {
+            send_error(client_fd);
+        }
+    } else {
+        fprintf(stderr, "Incomplete command data for GET.\n");
+        send_error(client_fd);
+    }
+}
+
+void handle_incr_command(int client_fd, unsigned char* buffer, size_t bytes_read) {
+    size_t command_len = buffer[0] << 8 | buffer[1];
+
+    size_t key_len = buffer[3] << 8 | buffer[4];
+
+    if (bytes_read-2 == command_len) {
+        unsigned char* value;
+        size_t value_len;
+        if (get_value(table, &buffer[5], key_len, &value, &value_len)) {
+            if (!is_integer(value, value_len)) {
+                fprintf(stderr, "value is not an integer.\n");
+                send_error(client_fd);
+                free(value);
+                return;
+            }
+
+            if (!set_value(table, &buffer[5], key_len, value, value_len)) {
+                fprintf(stderr, "unable to increment value.\n");
+            }
+
+            char *ptr;
+            const long long parsed_value = strtoll((const char*) value, &ptr, 10);
+
+            const uint64_t number = (uint64_t) parsed_value + 1;
+            unsigned char *incremented_number = (unsigned char*) int_to_string(number);
+
+            set_value(table, &buffer[5], key_len, incremented_number, value_len);
+            send_reply(client_fd, incremented_number, value_len);
+
             free(value);
         } else {
             send_error(client_fd);

@@ -148,29 +148,29 @@ fkvs-cli/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/fkvs-cli.dir/build.make CMakeFiles/fkvs-cli.dir/build
 .PHONY : fkvs-cli/fast
 
-command_handlers.o: command_handlers.c.o
-.PHONY : command_handlers.o
+client_command_handlers.o: client_command_handlers.c.o
+.PHONY : client_command_handlers.o
 
 # target to build an object file
-command_handlers.c.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/fkvs.dir/build.make CMakeFiles/fkvs.dir/command_handlers.c.o
-.PHONY : command_handlers.c.o
+client_command_handlers.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/fkvs-cli.dir/build.make CMakeFiles/fkvs-cli.dir/client_command_handlers.c.o
+.PHONY : client_command_handlers.c.o
 
-command_handlers.i: command_handlers.c.i
-.PHONY : command_handlers.i
+client_command_handlers.i: client_command_handlers.c.i
+.PHONY : client_command_handlers.i
 
 # target to preprocess a source file
-command_handlers.c.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/fkvs.dir/build.make CMakeFiles/fkvs.dir/command_handlers.c.i
-.PHONY : command_handlers.c.i
+client_command_handlers.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/fkvs-cli.dir/build.make CMakeFiles/fkvs-cli.dir/client_command_handlers.c.i
+.PHONY : client_command_handlers.c.i
 
-command_handlers.s: command_handlers.c.s
-.PHONY : command_handlers.s
+client_command_handlers.s: client_command_handlers.c.s
+.PHONY : client_command_handlers.s
 
 # target to generate assembly for a file
-command_handlers.c.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/fkvs.dir/build.make CMakeFiles/fkvs.dir/command_handlers.c.s
-.PHONY : command_handlers.c.s
+client_command_handlers.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/fkvs-cli.dir/build.make CMakeFiles/fkvs-cli.dir/client_command_handlers.c.s
+.PHONY : client_command_handlers.c.s
 
 command_parser.o: command_parser.c.o
 .PHONY : command_parser.o
@@ -340,6 +340,30 @@ server.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/fkvs.dir/build.make CMakeFiles/fkvs.dir/server.c.s
 .PHONY : server.c.s
 
+server_command_handlers.o: server_command_handlers.c.o
+.PHONY : server_command_handlers.o
+
+# target to build an object file
+server_command_handlers.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/fkvs.dir/build.make CMakeFiles/fkvs.dir/server_command_handlers.c.o
+.PHONY : server_command_handlers.c.o
+
+server_command_handlers.i: server_command_handlers.c.i
+.PHONY : server_command_handlers.i
+
+# target to preprocess a source file
+server_command_handlers.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/fkvs.dir/build.make CMakeFiles/fkvs.dir/server_command_handlers.c.i
+.PHONY : server_command_handlers.c.i
+
+server_command_handlers.s: server_command_handlers.c.s
+.PHONY : server_command_handlers.s
+
+# target to generate assembly for a file
+server_command_handlers.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/fkvs.dir/build.make CMakeFiles/fkvs.dir/server_command_handlers.c.s
+.PHONY : server_command_handlers.c.s
+
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -350,9 +374,9 @@ help:
 	@echo "... rebuild_cache"
 	@echo "... fkvs"
 	@echo "... fkvs-cli"
-	@echo "... command_handlers.o"
-	@echo "... command_handlers.i"
-	@echo "... command_handlers.s"
+	@echo "... client_command_handlers.o"
+	@echo "... client_command_handlers.i"
+	@echo "... client_command_handlers.s"
 	@echo "... command_parser.o"
 	@echo "... command_parser.i"
 	@echo "... command_parser.s"
@@ -374,6 +398,9 @@ help:
 	@echo "... server.o"
 	@echo "... server.i"
 	@echo "... server.s"
+	@echo "... server_command_handlers.o"
+	@echo "... server_command_handlers.i"
+	@echo "... server_command_handlers.s"
 .PHONY : help
 
 

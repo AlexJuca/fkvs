@@ -1,26 +1,26 @@
-#include <errno.h>
-#include "event_dispatcher.h"
-#include "list.h"
-#include "list.c"
 #include "config.c"
-#include <fcntl.h>
-#include "network.c"
-#include "utils.h"
+#include "event_dispatcher.h"
 #include "hashtable.h"
-#include "command_handlers.h"
-#include <stdio.h>
+#include "list.c"
+#include "list.h"
+#include "network.c"
+#include "server_command_handlers.h"
+#include "utils.h"
+#include <errno.h>
+#include <fcntl.h>
 #include <signal.h>
-#include <stdlib.h>
 #include <stdbool.h>
-#include <sys/select.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <sys/select.h>
+#include <sys/types.h>
 #include <sys/utsname.h>
 #include <time.h>
 #include <unistd.h>
-#include <sys/types.h>
 
 /* Global Server instance */
-struct server_t server;
+server_t server;
 
 int SERVER_FD = -1;
 int EPOLL_KQQUEUE_FD = -1;

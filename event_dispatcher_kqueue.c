@@ -24,18 +24,18 @@ extern server_t server;
 
 #define MAX_EVENTS 4096
 
-static void set_nonblocking(int fd) {
+static void set_nonblocking(const int fd) {
     int flags = fcntl(fd, F_GETFL, 0);
     if (flags < 0) flags = 0;
     (void)fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
 
-static void set_tcp_no_delay(int fd) {
+static void set_tcp_no_delay(const int fd) {
     const int one = 1;
     (void)setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
 }
 
-static void close_and_drop_client(int kq, client_t *c) {
+static void close_and_drop_client(const int kq, client_t *c) {
     if (!c) return;
 
     if (server.verbose) {
@@ -60,7 +60,9 @@ static void close_and_drop_client(int kq, client_t *c) {
 
 static void try_process_frames(client_t *c) {
     // Parse as many complete frames as possible.
-    printf("Attempting to process frames");
+    if (server.verbose) {
+        printf("Attempting to process frames");
+    }
     for (;;) {
         if (c->buf_used < 2) return; // need length prefix
 
@@ -265,7 +267,6 @@ int run_event_loop(int server_fd) {
                     continue;
                 }
 
-                // Real error
                 perror("recv");
                 close_and_drop_client(kq, c);
                 break;
