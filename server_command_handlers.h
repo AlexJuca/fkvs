@@ -1,5 +1,5 @@
-#ifndef COMMAND_HANDLERS_H
-#define COMMAND_HANDLERS_H
+#ifndef SERVER_COMMAND_HANDLERS_H
+#define SERVER_COMMAND_HANDLERS_H
 
 #include "hashtable.h"
 
@@ -14,4 +14,4 @@ void handle_get_command(int client_fd, unsigned char *buffer,
 void handle_incr_command(int client_fd, unsigned char *buffer,
                          size_t bytes_read);
 
-#endif // COMMAND_HANDLERS_H
+#endif // SERVER_COMMAND_HANDLERS_H

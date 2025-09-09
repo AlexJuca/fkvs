@@ -56,7 +56,7 @@ void inline print_binary_data(const unsigned char *data, const size_t len)
     putchar('\n');
 }
 
-inline bool is_integer(const unsigned char *str, const size_t len)
+static inline bool is_integer(const unsigned char *str, const size_t len)
 {
     if (len == 0) {
         return false;
@@ -81,7 +81,7 @@ inline bool is_integer(const unsigned char *str, const size_t len)
     return true;
 }
 
-inline char *int_to_string(const uint64_t number)
+static inline char *int_to_string(const uint64_t number)
 {
     char *buffer = malloc(22 * sizeof(char));
     if (buffer == NULL) {

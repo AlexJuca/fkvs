@@ -1,4 +1,3 @@
-#include "server_command_handlers.h"
 #include "command_defs.h"
 #include "command_registry.h"
 #include "hashtable.h"
@@ -7,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/socket.h>
+#include "server_command_handlers.h"
 
 static HashTable *table = NULL;
 
