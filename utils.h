@@ -12,7 +12,7 @@ extern server_t server;
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 
 static void error_and_exit(const char *ctx, const char *file,
-                                  const int line) {
+const int line) {
   fprintf(stderr, "[%s - %d]\n", file, line); 
   perror(ctx);
   exit(EXIT_FAILURE);
@@ -30,7 +30,7 @@ static inline void append_to_log_file(char *ctx) {
 }
 
 static void log_std_out(char *ctx) {
-  time_t ct = time(NULL);
+  const time_t ct = time(NULL);
   char ts[32];
 
   strftime(ts, sizeof ts, "%Y-%m-%d %H:%M:%S", localtime(&ct));
@@ -44,7 +44,7 @@ static void log(char *ctx) {
 
 void inline print_binary_data(const unsigned char* data, const size_t len) {
     for (size_t j = 0; j < len; j++) {
-        unsigned char c = data[j];
+        const unsigned char c = data[j];
         if (c >= 32 && c <= 126) {
             putchar(c); // printable ASCII
         } else {
@@ -54,7 +54,7 @@ void inline print_binary_data(const unsigned char* data, const size_t len) {
     putchar('\n');
 }
 
-inline bool is_integer(const unsigned char *str, size_t len) {
+inline bool is_integer(const unsigned char *str, const size_t len) {
     if (len == 0) {
         return false;
     }
@@ -78,18 +78,15 @@ inline bool is_integer(const unsigned char *str, size_t len) {
     return true;
 }
 
-inline char * int_to_string(const uint64_t number) {
-    printf("number: %llu \n", number);
+inline char *int_to_string(const uint64_t number) {
     char* buffer = malloc(22 * sizeof(char));
     if (buffer == NULL) {
         return NULL;
     }
 
     snprintf(buffer, 22, "%" PRIu64, number);
-    printf("number: %s \n", buffer);
     return buffer;
 }
-
 
 #define LOG(ctx) log(ctx)
 #define ERROR_AND_EXIT(ctx) error_and_exit((ctx), __FILE__, __LINE__)

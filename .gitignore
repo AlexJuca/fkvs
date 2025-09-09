@@ -1,7 +1,7 @@
 CMakeFiles
 cmake_install.cmake
-.fkvs-cli
-.fkvs
+*fkvs-cli
+*fkvs
 .idea
 ./fkvs-cli
 build.log

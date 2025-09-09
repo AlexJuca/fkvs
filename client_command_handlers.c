@@ -83,7 +83,7 @@ cmd_t command_table[] = {
 };
 
 void execute_command(const char *cmd, client_t *client, void (*response_cb)(client_t *client)) {
-    const command_args_t args = { cmd, client };
+    const command_args_t args = { .cmd = cmd, .client = client };
     for (int i = 0; i < ARRAY_SIZE(command_table); i++) {
         command_table[i].cmd_fn(args, response_cb);
     }

@@ -3,6 +3,7 @@
 
 #include "list.h"
 #include <stdbool.h>
+#include <sys/types.h>
 
 typedef struct server_t {
   bool daemonize;
