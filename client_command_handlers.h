@@ -9,14 +9,16 @@ typedef struct {
     client_t *client;
 } command_args_t;
 
-typedef void (*cmd_fn) (command_args_t args, void (*response_cb)(client_t *client));
+typedef void (*cmd_fn)(command_args_t args,
+                       void (*response_cb)(client_t *client));
 
 typedef struct {
     const char *cmd_name;
     void (*cmd_fn)(command_args_t args, void (*response_cb)(client_t *client));
 } cmd_t;
 
-void execute_command(const char *cmd, client_t *client, void (*response_cb)(client_t *client));
+void execute_command(const char *cmd, client_t *client,
+                     void (*response_cb)(client_t *client));
 
 void cmd_get(command_args_t args, void (*response_cb)(client_t *client));
 

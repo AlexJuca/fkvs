@@ -7,7 +7,7 @@
 #define DEFAULT_SERVER_CONFIG_FILE_PATH "server.conf"
 #define DEFAULT_CLIENT_CONFIG_FILE_PATH "client.conf"
 
-server_t loadServerConfig(char *path);
-client_t loadClientConfig(char *path);
+server_t loadServerConfig(const char *path);
+client_t loadClientConfig(const char *path);
 
 #endif // CONFIG_H

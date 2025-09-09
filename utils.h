@@ -11,38 +11,40 @@ extern server_t server;
 
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 
-static void error_and_exit(const char *ctx, const char *file,
-const int line) {
-  fprintf(stderr, "[%s - %d]\n", file, line); 
-  perror(ctx);
-  exit(EXIT_FAILURE);
+static void error_and_exit(const char *ctx, const char *file, const int line)
+{
+    fprintf(stderr, "[%s - %d]\n", file, line);
+    perror(ctx);
+    exit(EXIT_FAILURE);
 }
 
-static void warn(char *ctx, const char *file, int line) {
-  fprintf(stderr, "[%s - %d]\n", file, line);
-  perror(ctx);
+static void warn(const char *ctx, const char *file, int line)
+{
+    fprintf(stderr, "[%s - %d]\n", file, line);
+    perror(ctx);
 }
 
-//TODO: When process is running as a daemon, ensure we don't print to standard file descriptors
-//rather we should write to a log file.
-static inline void append_to_log_file(char *ctx) {
-    
+// TODO: When process is running as a daemon, ensure we don't print to standard
+// file descriptors rather we should write to a log file.
+static inline void append_to_log_file(char *ctx) {}
+
+static void log_std_out(char *ctx)
+{
+    const time_t ct = time(NULL);
+    char ts[32];
+
+    strftime(ts, sizeof ts, "%Y-%m-%d %H:%M:%S", localtime(&ct));
+
+    fprintf(stdout, "%s - %s \n", ts, ctx);
 }
 
-static void log_std_out(char *ctx) {
-  const time_t ct = time(NULL);
-  char ts[32];
-
-  strftime(ts, sizeof ts, "%Y-%m-%d %H:%M:%S", localtime(&ct));
-
-  fprintf(stdout, "%s - %s \n", ts, ctx);
+static void log(char *ctx)
+{
+    server.daemonize ? append_to_log_file(ctx) : log_std_out(ctx);
 }
 
-static void log(char *ctx) {
-  server.daemonize ? append_to_log_file(ctx) : log_std_out(ctx);
-}
-
-void inline print_binary_data(const unsigned char* data, const size_t len) {
+void inline print_binary_data(const unsigned char *data, const size_t len)
+{
     for (size_t j = 0; j < len; j++) {
         const unsigned char c = data[j];
         if (c >= 32 && c <= 126) {
@@ -54,7 +56,8 @@ void inline print_binary_data(const unsigned char* data, const size_t len) {
     putchar('\n');
 }
 
-inline bool is_integer(const unsigned char *str, const size_t len) {
+inline bool is_integer(const unsigned char *str, const size_t len)
+{
     if (len == 0) {
         return false;
     }
@@ -78,8 +81,9 @@ inline bool is_integer(const unsigned char *str, const size_t len) {
     return true;
 }
 
-inline char *int_to_string(const uint64_t number) {
-    char* buffer = malloc(22 * sizeof(char));
+inline char *int_to_string(const uint64_t number)
+{
+    char *buffer = malloc(22 * sizeof(char));
     if (buffer == NULL) {
         return NULL;
     }

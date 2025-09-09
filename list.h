@@ -2,16 +2,16 @@
 #define LIST_H
 
 typedef struct list_node_t {
-  struct list_node_t *prev;
-  struct list_node_t *next;
-   void *val;
+    struct list_node_t *prev;
+    struct list_node_t *next;
+    void *val;
 } list_node_t;
 
 typedef struct list_t {
-  struct list_node_t *head;
-  struct list_node_t *tail;
-  int len;
-  void (*free) (void *ptr);
+    list_node_t *head;
+    list_node_t *tail;
+    int len;
+    void (*free)(void *ptr);
 } list_t;
 
 list_t *listCreate(void);

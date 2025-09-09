@@ -1,13 +1,14 @@
 #ifndef COMMAND_REGISTRY_H
 #define COMMAND_REGISTRY_H
 
-#include <stdlib.h>
 #include <stdint.h>
+#include <stdlib.h>
 
-typedef void (*CommandHandler)(int client_fd, unsigned char* buffer, size_t bytes_read);
+typedef void (*CommandHandler)(int client_fd, unsigned char *buffer,
+                               size_t bytes_read);
 
 void register_command(uint8_t command_id, CommandHandler handler);
-void dispatch_command(int client_fd, unsigned char* buffer, size_t bytes_read);
+void dispatch_command(int client_fd, unsigned char *buffer, size_t bytes_read);
 
 void send_ok(int client_fd);
 void send_error(int client_fd);

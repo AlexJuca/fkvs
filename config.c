@@ -1,113 +1,120 @@
 #include "config.h"
 #include "client.h"
+#include "utils.h"
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "utils.h"
 
-server_t loadServerConfig(char *path) {
-  FILE *config = fopen(path == NULL ? DEFAULT_SERVER_CONFIG_FILE_PATH : path, "r"); 
+server_t loadServerConfig(const char *path)
+{
+    FILE *config =
+        fopen(path == NULL ? DEFAULT_SERVER_CONFIG_FILE_PATH : path, "r");
 
-  if (!config) {
-    ERROR_AND_EXIT("Failed to open server config file: ");
-  }
-
-  server_t server;
-  server.numClients = 0;
-
-  char line[1024];
-
-  while (fgets(line, sizeof(line), config)) {
-    if (line[0] == '#' || line[0] == '\0') continue; // Let's ignore comment lines and blank lines in configuration files
-
-    char key[512];
-    char value[512];
-    sscanf(line, "%s %s", key, value);
-
-    if (strcmp(key, "port") == 0) {
-      server.port = atoi(value);
+    if (!config) {
+        ERROR_AND_EXIT("Failed to open server config file: ");
     }
 
-    if (strcmp(key, "show-logo") == 0) {
-      if (strcmp(value, "true") == 0) {
-        server.showLogo = true;
-      } else if (strcmp(value, "false") == 0) {
-        server.showLogo = false;
-      } else {
-        ERROR_AND_EXIT("'show-logo' expects a truthy value.");
-      }
+    server_t server;
+    server.numClients = 0;
+
+    char line[1024];
+
+    while (fgets(line, sizeof(line), config)) {
+        if (line[0] == '#' || line[0] == '\0')
+            continue; // Let's ignore comment lines and blank lines in
+                      // configuration files
+
+        char key[512];
+        char value[512];
+        sscanf(line, "%s %s", key, value);
+
+        if (strcmp(key, "port") == 0) {
+            server.port = atoi(value);
+        }
+
+        if (strcmp(key, "show-logo") == 0) {
+            if (strcmp(value, "true") == 0) {
+                server.showLogo = true;
+            } else if (strcmp(value, "false") == 0) {
+                server.showLogo = false;
+            } else {
+                ERROR_AND_EXIT("'show-logo' expects a truthy value.");
+            }
+        }
+
+        if (strcmp(key, "verbose") == 0) {
+            if (strcmp(value, "true") == 0) {
+                server.verbose = true;
+            } else if (strcmp(value, "false") == 0) {
+                server.verbose = false;
+            } else {
+                ERROR_AND_EXIT("'verbose' expects a truthy value.");
+            }
+        }
+
+        if (strcmp(key, "daemonize") == 0) {
+            if (strcmp(value, "true") == 0) {
+                server.daemonize = true;
+            } else if (strcmp(value, "false") == 0) {
+                server.daemonize = false;
+            } else {
+                ERROR_AND_EXIT("'daemonize' expects a truth value");
+            }
+
+            if (strcmp(key, "log-enabled") == 0) {
+                if (strcmp(value, "true") == 0) {
+                    server.isLogEnabled = true;
+                } else if (strcmp(value, "false") == 0) {
+                    server.isLogEnabled = false;
+                } else {
+                    ERROR_AND_EXIT("'log-enabled' expects a truthy value.");
+                }
+            }
+        }
     }
 
-    if (strcmp(key, "verbose") == 0) {
-      if (strcmp(value, "true") == 0) {
-        server.verbose = true;
-      } else if (strcmp(value, "false") == 0) {
-        server.verbose = false;
-      } else {
-        ERROR_AND_EXIT("'verbose' expects a truthy value.");
-      }
-    }
-
-    if (strcmp(key, "daemonize") == 0) {
-      if (strcmp(value, "true") == 0) {
-        server.daemonize = true;
-      } else if (strcmp(value, "false") == 0) {
-        server.daemonize = false;
-      } else {
-        ERROR_AND_EXIT("'daemonize' expects a truth value");
-      }
-
-    if (strcmp(key, "log-enabled") == 0) {
-      if (strcmp(value, "true") == 0) {
-        server.isLogEnabled = true;
-      } else if (strcmp(value, "false") == 0) {
-        server.isLogEnabled = false;
-      } else {
-          ERROR_AND_EXIT("'log-enabled' expects a truthy value.");
-      }
-    }
-   }
-  }
-
-  fclose(config);
-  return server;
+    fclose(config);
+    return server;
 }
 
-client_t loadClientConfig(char *path) {
-  FILE *config = fopen(path == NULL ? DEFAULT_CLIENT_CONFIG_FILE_PATH : path, "r");
+client_t loadClientConfig(const char *path)
+{
+    FILE *config =
+        fopen(path == NULL ? DEFAULT_CLIENT_CONFIG_FILE_PATH : path, "r");
 
-  if (!config) {
-    ERROR_AND_EXIT("failed to open client config file: ");
-  }
-
-  client_t client;
-  client.port = 5995;
-  client.ip_address = "127.0.0.1";
-  client.verbose = false;
-
-  char line[1024];
-
-  while(fgets(line, sizeof(line), config)) {
-    if (line[0] == '#' || line[0] == '\0') continue;
-
-    char key[256];
-    char value[512];
-
-    sscanf(line, "%s %s", key, value);
-
-    if (strcmp(key, "bind") == 0) {
-      client.ip_address = value;
+    if (!config) {
+        ERROR_AND_EXIT("failed to open client config file: ");
     }
 
-    if (strcmp(key, "port") == 0) {
-      client.port = atoi(value);
+    client_t client;
+    client.port = 5995;
+    client.ip_address = "127.0.0.1";
+    client.verbose = false;
+
+    char line[1024];
+
+    while (fgets(line, sizeof(line), config)) {
+        if (line[0] == '#' || line[0] == '\0')
+            continue;
+
+        char key[256];
+        char value[512];
+
+        sscanf(line, "%s %s", key, value);
+
+        if (strcmp(key, "bind") == 0) {
+            client.ip_address = value;
+        }
+
+        if (strcmp(key, "port") == 0) {
+            client.port = atoi(value);
+        }
+
+        if (strcmp(key, "verbose") == 0) {
+            client.verbose = true;
+        }
     }
 
-    if (strcmp(key, "verbose") == 0) {
-      client.verbose = true;
-    }
-  }
-
-  return client;
+    return client;
 }

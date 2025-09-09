@@ -6,7 +6,6 @@
 #include "list.h"
 #include "server.h"
 #include "utils.h"
-
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -24,19 +23,24 @@ extern server_t server;
 
 #define MAX_EVENTS 4096
 
-static void set_nonblocking(const int fd) {
+static void set_nonblocking(const int fd)
+{
     int flags = fcntl(fd, F_GETFL, 0);
-    if (flags < 0) flags = 0;
+    if (flags < 0)
+        flags = 0;
     (void)fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
 
-static void set_tcp_no_delay(const int fd) {
+static void set_tcp_no_delay(const int fd)
+{
     const int one = 1;
     (void)setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
 }
 
-static void close_and_drop_client(const int kq, client_t *c) {
-    if (!c) return;
+static void close_and_drop_client(const int kq, client_t *c)
+{
+    if (!c)
+        return;
 
     if (server.verbose) {
         printf("Dropping client fd=%d (%s:%d)\n", c->fd, c->ip_str, c->port);
@@ -48,7 +52,8 @@ static void close_and_drop_client(const int kq, client_t *c) {
     (void)kevent(kq, &ch, 1, NULL, 0, NULL);
 
     // remove from the server list
-    list_node_t *node = listFindNode(server.clients, NULL, (void *)(intptr_t)c->fd);
+    list_node_t *node =
+        listFindNode(server.clients, NULL, (void *)(intptr_t)c->fd);
     if (node) {
         listDeleteNode(server.clients, node);
         free(node->val); // free(client_t)
@@ -58,21 +63,25 @@ static void close_and_drop_client(const int kq, client_t *c) {
     close(c->fd);
 }
 
-static void try_process_frames(client_t *c) {
+static void try_process_frames(client_t *c)
+{
     // Parse as many complete frames as possible.
     if (server.verbose) {
         printf("Attempting to process frames");
     }
     for (;;) {
-        if (c->buf_used < 2) return; // need length prefix
+        if (c->buf_used < 2)
+            return; // need length prefix
 
         if (c->frame_need < 0) {
             uint16_t core_len = ((uint16_t)c->buffer[0] << 8) | c->buffer[1];
-            c->frame_need = 2 + (ssize_t)core_len; // total frame bytes (prefix + core)
+            c->frame_need =
+                2 + (ssize_t)core_len; // total frame bytes (prefix + core)
             if ((size_t)c->frame_need > sizeof(c->buffer)) {
-                fprintf(stderr, "Frame too large: %zd > %zu\n",
-                        c->frame_need, sizeof(c->buffer));
-                // Drop the buffer contents to resync; caller should disconnect the client.
+                fprintf(stderr, "Frame too large: %zd > %zu\n", c->frame_need,
+                        sizeof(c->buffer));
+                // Drop the buffer contents to resync; caller should disconnect
+                // the client.
                 c->buf_used = 0;
                 c->frame_need = -1;
                 return;
@@ -94,13 +103,15 @@ static void try_process_frames(client_t *c) {
 
         // Shift any remaining bytes (back-to-back frames).
         size_t remain = c->buf_used - frame_len;
-        if (remain) memmove(c->buffer, c->buffer + frame_len, remain);
+        if (remain)
+            memmove(c->buffer, c->buffer + frame_len, remain);
         c->buf_used = remain;
         c->frame_need = -1; // recompute for next frame
     }
 }
 
-int run_event_loop(int server_fd) {
+int run_event_loop(int server_fd)
+{
     if (server.verbose) {
         printf("Connected clients: %d\n", (int)server.numClients);
     }
@@ -114,7 +125,8 @@ int run_event_loop(int server_fd) {
     }
 
     struct kevent ch;
-    EV_SET(&ch, server_fd, EVFILT_READ, EV_ADD | EV_ENABLE | EV_CLEAR, 0, 0, NULL);
+    EV_SET(&ch, server_fd, EVFILT_READ, EV_ADD | EV_ENABLE | EV_CLEAR, 0, 0,
+           NULL);
     if (kevent(kq, &ch, 1, NULL, 0, NULL) == -1) {
         perror("kevent register (server)");
         close(kq);
@@ -126,7 +138,8 @@ int run_event_loop(int server_fd) {
     for (;;) {
         int n = kevent(kq, NULL, 0, evs, MAX_EVENTS, NULL);
         if (n < 0) {
-            if (errno == EINTR) continue;
+            if (errno == EINTR)
+                continue;
             perror("kevent wait");
             break;
         }
@@ -140,9 +153,11 @@ int run_event_loop(int server_fd) {
                 for (;;) {
                     struct sockaddr_storage ss;
                     socklen_t slen = sizeof(ss);
-                    const int cfd = accept(server_fd, (struct sockaddr *)&ss, &slen);
+                    const int cfd =
+                        accept(server_fd, (struct sockaddr *)&ss, &slen);
                     if (cfd < 0) {
-                        if (errno == EAGAIN || errno == EWOULDBLOCK) break;
+                        if (errno == EAGAIN || errno == EWOULDBLOCK)
+                            break;
                         perror("accept");
                         break;
                     }
@@ -150,8 +165,9 @@ int run_event_loop(int server_fd) {
                     set_nonblocking(cfd);
                     set_tcp_no_delay(cfd);
 
-                    // TODO: We probably want to move the client construction out of here, since this is
-                    // not the direct responsibility of the event loop.
+                    // TODO: We probably want to move the client construction
+                    // out of here, since this is not the direct responsibility
+                    // of the event loop.
                     client_t *c = (client_t *)calloc(1, sizeof(*c));
                     if (!c) {
                         perror("calloc client");
@@ -163,17 +179,20 @@ int run_event_loop(int server_fd) {
                     c->buf_used = 0;
                     c->frame_need = -1;
                     c->ip_str[0] = '\0';
-                    c->ip_address = c->ip_str; // conform to struct; alias to ip_str
+                    c->ip_address =
+                        c->ip_str; // conform to struct; alias to ip_str
                     c->port = 0;
 
                     // Peer address → ip_str & port
                     if (ss.ss_family == AF_INET) {
                         struct sockaddr_in *sin = (struct sockaddr_in *)&ss;
-                        inet_ntop(AF_INET, &sin->sin_addr, c->ip_str, sizeof(c->ip_str));
+                        inet_ntop(AF_INET, &sin->sin_addr, c->ip_str,
+                                  sizeof(c->ip_str));
                         c->port = (int)ntohs(sin->sin_port);
                     } else if (ss.ss_family == AF_INET6) {
                         struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)&ss;
-                        inet_ntop(AF_INET6, &sin6->sin6_addr, c->ip_str, sizeof(c->ip_str));
+                        inet_ntop(AF_INET6, &sin6->sin6_addr, c->ip_str,
+                                  sizeof(c->ip_str));
                         c->port = (int)ntohs(sin6->sin6_port);
                     } else {
                         snprintf(c->ip_str, sizeof(c->ip_str), "unknown");
@@ -185,11 +204,14 @@ int run_event_loop(int server_fd) {
 
                     if (server.verbose) {
                         printf("Client connected fd=%d %s:%d (total=%d)\n",
-                               c->fd, c->ip_str, c->port, (int)server.numClients);
+                               c->fd, c->ip_str, c->port,
+                               (int)server.numClients);
                     }
 
-                    // Register the client fd with kqueue and stash client* in udata
-                    EV_SET(&ch, c->fd, EVFILT_READ, EV_ADD | EV_ENABLE | EV_CLEAR, 0, 0, c);
+                    // Register the client fd with kqueue and stash client* in
+                    // udata
+                    EV_SET(&ch, c->fd, EVFILT_READ,
+                           EV_ADD | EV_ENABLE | EV_CLEAR, 0, 0, c);
 
                     if (kevent(kq, &ch, 1, NULL, 0, NULL) == -1) {
                         perror("kevent add client");
@@ -202,9 +224,11 @@ int run_event_loop(int server_fd) {
             // Existing client readable or closed.
             client_t *c = (client_t *)evs[i].udata;
 
-            // Fallback: if udata is missing, find by fd (kept for compatibility).
+            // Fallback: if udata is missing, find by fd (kept for
+            // compatibility).
             if (!c) {
-                list_node_t *node = listFindNode(server.clients, NULL, (void *)(intptr_t)ident_fd);
+                list_node_t *node = listFindNode(server.clients, NULL,
+                                                 (void *)(intptr_t)ident_fd);
                 c = node ? (client_t *)node->val : NULL;
                 if (!c) {
                     // Unknown fd; close it defensively.
@@ -224,24 +248,26 @@ int run_event_loop(int server_fd) {
 
             // Drain socket data (non-blocking)
             for (;;) {
-                ssize_t nread = recv(c->fd,
-                                     c->buffer + c->buf_used,
-                                     sizeof(c->buffer) - c->buf_used,
-                                     0);
+                ssize_t nread = recv(c->fd, c->buffer + c->buf_used,
+                                     sizeof(c->buffer) - c->buf_used, 0);
                 if (nread > 0) {
                     c->buf_used += (size_t)nread;
                     if (server.verbose) {
-                        printf("fd=%d read %zd bytes (buf_used=%zu)\n",
-                               c->fd, nread, c->buf_used);
+                        printf("fd=%d read %zd bytes (buf_used=%zu)\n", c->fd,
+                               nread, c->buf_used);
                     }
 
                     // Process all complete frames currently in buffer
                     try_process_frames(c);
 
-                    // If the buffer is full, but we still need more for a frame → protocol error.
+                    // If the buffer is full, but we still need more for a frame
+                    // → protocol error.
                     if (c->buf_used == sizeof(c->buffer) && c->frame_need > 0 &&
                         (ssize_t)c->buf_used < c->frame_need) {
-                        fprintf(stderr, "fd=%d frame exceeds buffer capacity; dropping client\n", c->fd);
+                        fprintf(stderr,
+                                "fd=%d frame exceeds buffer capacity; dropping "
+                                "client\n",
+                                c->fd);
                         close_and_drop_client(kq, c);
                         break;
                     }

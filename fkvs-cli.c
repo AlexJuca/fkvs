@@ -1,6 +1,5 @@
 #include "client.h"
 #include "client_command_handlers.h"
-#include "server_command_handlers.h"
 #include "config.h"
 #include "network.c"
 #include "utils.h"
@@ -8,7 +7,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-void run_repl(client_t client) {
+void run_repl(client_t client)
+{
     char command[BUFFER_SIZE];
 
     printf("Connected to server. Type 'exit' to quit.\n");
@@ -32,7 +32,8 @@ void run_repl(client_t client) {
     }
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
     client_t client = loadClientConfig(NULL);
 
     const int client_fd = start_client(&client);
@@ -43,5 +44,4 @@ int main(int argc, char *argv[]) {
 
     run_repl(client);
     close(client.fd);
-    return 0;
 }
