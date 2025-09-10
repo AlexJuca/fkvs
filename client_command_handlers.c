@@ -74,9 +74,17 @@ void cmd_inc(const command_args_t args, void (*response_cb)(client_t *client))
     }
 }
 
-void cmd_unknown()
+/*
+ * TODO: This approach works but is cumbersome to maintain. For future reference,
+ * lets implement a solution that doesn't require us to have a conditional with
+ * possible command values.
+ */
+void cmd_unknown(const command_args_t args,
+                 void (*response_cb)(client_t *client))
 {
+  if (strcasecmp(args.cmd, "INCR") & strcasecmp(args.cmd, "GET") & strcasecmp(args.cmd, "SET")) {
     printf("Unknown command \n");
+  }
 }
 
 cmd_t command_table[] = {{"cmd_set", cmd_set},
@@ -89,7 +97,7 @@ void execute_command(const char *cmd, client_t *client,
 {
     const command_args_t args = {.cmd = cmd, .client = client};
     for (int i = 0; i < ARRAY_SIZE(command_table); i++) {
-        command_table[i].cmd_fn(args, response_cb);
+      command_table[i].cmd_fn(args, response_cb);
     }
 }
 
