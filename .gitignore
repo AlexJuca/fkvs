@@ -3,7 +3,7 @@ Makefile
 CmakeCache.txt
 cmake_install.cmake
 *fkvs-cli
+*fkvs-server
 *fkvs
 .idea
-./fkvs-cli
 build.log

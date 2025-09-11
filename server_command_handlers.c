@@ -1,3 +1,4 @@
+#include "server_command_handlers.h"
 #include "command_defs.h"
 #include "command_registry.h"
 #include "hashtable.h"
@@ -6,7 +7,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/socket.h>
-#include "server_command_handlers.h"
 
 static HashTable *table = NULL;
 
@@ -16,10 +16,16 @@ void init_command_handlers(HashTable *ht)
     register_command(CMD_SET, handle_set_command);
     register_command(CMD_GET, handle_get_command);
     register_command(CMD_INCR, handle_incr_command);
+    register_command(CMD_PING, handle_ping_command);
 }
 
 void handle_set_command(int client_fd, unsigned char *buffer, size_t bytes_read)
 {
+    if (server.verbose) {
+        printf("Server received %d bytes from client %d \n", (int)bytes_read,
+               client_fd);
+        print_binary_data(buffer, bytes_read);
+    }
     // Need at least: core_len(2) + cmd(1) + key_len(2)
     if (bytes_read < 5) {
         unsigned char fail[] = {STATUS_FAILURE};
@@ -90,8 +96,10 @@ void handle_set_command(int client_fd, unsigned char *buffer, size_t bytes_read)
     char *data = malloc(value_len + 1);
     memcpy(data, &buffer[pos_value], value_len);
 
-    printf("Wrote value '%s' to database \n", data);
-    printf("Wrote %d bytes to database \n", value_len);
+    if (server.verbose) {
+        printf("Wrote value '%s' to database \n", data);
+        printf("Wrote %d bytes to database \n", value_len);
+    }
 
     set_value(table, &buffer[pos_key], key_len, &buffer[pos_value], value_len);
 
@@ -159,6 +167,25 @@ void handle_incr_command(int client_fd, unsigned char *buffer,
         }
     } else {
         fprintf(stderr, "Incomplete command data for GET.\n");
+        send_error(client_fd);
+    }
+}
+
+void handle_ping_command(int client_fd, unsigned char *buffer,
+                         size_t bytes_read)
+{
+    const size_t command_len = buffer[0] << 8 | buffer[1];
+
+    if (server.verbose) {
+        printf("Server received %d bytes from client %d \n", (int)bytes_read,
+               client_fd);
+        print_binary_data(buffer, bytes_read);
+    }
+
+    if (bytes_read - 2 == command_len) {
+        send_pong(client_fd, buffer);
+    } else {
+        fprintf(stderr, "Incomplete command data for PING.\n");
         send_error(client_fd);
     }
 }

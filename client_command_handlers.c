@@ -1,5 +1,6 @@
 #include "client_command_handlers.h"
 #include "client.h"
+#include "command_defs.h"
 #include "command_parser.h"
 #include "utils.h"
 #include <stdio.h>
@@ -11,7 +12,8 @@ void cmd_get(const command_args_t args, void (*response_cb)(client_t *client))
     if (!strcasecmp(args.cmd, "GET")) {
         const char *key = strtok(NULL, " ");
         if (key == NULL) {
-            printf("Usage: GET <key>\n");
+            printf("(error) ERR wrong number of arguments for 'get' command\n");
+            printf("(info) Usage: GET <key>\n");
             return;
         }
 
@@ -35,7 +37,8 @@ void cmd_set(const command_args_t args, void (*response_cb)(client_t *client))
         const char *value = strtok(NULL, " ");
 
         if (key == NULL || value == NULL) {
-            printf("Usage: SET <key> <value>\n");
+            printf("(error) ERR wrong number of arguments for 'set' command\n");
+            printf("(info) Usage: SET <key> <value>\n");
             return;
         }
 
@@ -57,14 +60,54 @@ void cmd_inc(const command_args_t args, void (*response_cb)(client_t *client))
     if (!strcasecmp(args.cmd, "INCR")) {
         const char *key = strtok(NULL, " ");
         if (key == NULL) {
-            printf("Usage: INCR <key>\n");
+            printf(
+                "(error) ERR wrong number of arguments for 'incr' command\n");
+            printf("(info) Usage: INCR <key>\n");
             return;
         }
 
         size_t cmd_len;
         unsigned char *binary_cmd = construct_incr_command(key, &cmd_len);
         if (binary_cmd == NULL) {
-            fprintf(stderr, "Failed to construct INCR command\n");
+            fprintf(stderr, "(error) Failed to construct INCR command\n");
+            return;
+        }
+
+        send(args.client->fd, binary_cmd, cmd_len, 0);
+        free(binary_cmd);
+        response_cb(args.client);
+    }
+}
+
+void cmd_ping(const command_args_t args, void (*response_cb)(client_t *client))
+{
+    if (!strcasecmp(args.cmd, "PING")) {
+        size_t cmd_len;
+        char *value = NULL;
+
+        char *token = strtok(NULL, " ");
+        if (token != NULL) {
+            if (token[0] == '"') {
+                token = strtok(
+                    token + 1,
+                    "\""); // Skip the opening quote, get until closing quote
+                if (token == NULL) {
+                    value = "";
+                } else {
+                    value = token;
+                }
+            } else {
+                // Unquoted token (e.g., PING hello)
+                value = token;
+            }
+        } else {
+            // No argument (e.g., PING)
+            value = "";
+        }
+
+        unsigned char *binary_cmd = construct_ping_command(value, &cmd_len);
+        if (binary_cmd == NULL) {
+            fprintf(stderr, "Failed to construct PING command\n");
             return;
         }
 
@@ -75,29 +118,31 @@ void cmd_inc(const command_args_t args, void (*response_cb)(client_t *client))
 }
 
 /*
- * TODO: This approach works but is cumbersome to maintain. For future reference,
- * lets implement a solution that doesn't require us to have a conditional with
- * possible command values.
+ * TODO: This approach works but is cumbersome to maintain. For future
+ * reference, lets implement a solution that doesn't require us to have a
+ * conditional with possible command values.
  */
 void cmd_unknown(const command_args_t args,
                  void (*response_cb)(client_t *client))
 {
-  if (strcasecmp(args.cmd, "INCR") & strcasecmp(args.cmd, "GET") & strcasecmp(args.cmd, "SET")) {
-    printf("Unknown command \n");
-  }
+    if (strcasecmp(args.cmd, "INCR") & strcasecmp(args.cmd, "GET") &
+        strcasecmp(args.cmd, "SET") & strcasecmp(args.cmd, "PING")) {
+        printf("Unknown command \n");
+    }
 }
 
-cmd_t command_table[] = {{"cmd_set", cmd_set},
-                         {"cmd_get", cmd_get},
-                         {"cmd_inc", cmd_inc},
-                         {"cmd_unknown", cmd_unknown}};
+const cmd_t command_table[] = {{"cmd_set", cmd_set},
+                               {"cmd_get", cmd_get},
+                               {"cmd_inc", cmd_inc},
+                               {"cmd_ping", cmd_ping},
+                               {"cmd_unknown", cmd_unknown}};
 
 void execute_command(const char *cmd, client_t *client,
                      void (*response_cb)(client_t *client))
 {
     const command_args_t args = {.cmd = cmd, .client = client};
     for (int i = 0; i < ARRAY_SIZE(command_table); i++) {
-      command_table[i].cmd_fn(args, response_cb);
+        command_table[i].cmd_fn(args, response_cb);
     }
 }
 
@@ -110,16 +155,36 @@ void command_response_handler(client_t *client)
             const uint16_t core_len =
                 ((uint16_t)client->buffer[0] << 8) | client->buffer[1];
             if (bytes_received > core_len) {
-                printf("Bytes received: %u\n", bytes_received);
-                const size_t value_len =
-                    client->buffer[3] << 8 | client->buffer[4];
-                char *data = malloc(value_len + 1);
-                memcpy(data, &client->buffer[5], value_len);
-                printf("Ok> %s \n", data);
-                free(data);
+                if (client->buffer[2] == CMD_PING) {
+                    const size_t value_len =
+                        client->buffer[3] << 8 | client->buffer[4];
+                    if ((int)value_len ==
+                        0) { // if the length of the value relayed
+                        // back to client is 0, we assume no PING received no
+                        // arguments
+                        printf("PONG\n");
+                    } else {
+                        char *data = malloc(value_len + 1);
+                        memcpy(data, &client->buffer[5], value_len);
+                        printf("\"%s\" \n", data);
+                        free(data);
+                    }
+                } else {
+                    const size_t value_len =
+                        client->buffer[3] << 8 | client->buffer[4];
+                    char *data = malloc(value_len + 1);
+                    memcpy(data, &client->buffer[5], value_len);
+                    if (strlen(data) == 0) {
+                        printf("OK\n");
+                    } else {
+                        printf("\"%s\" \n", data);
+                    }
+
+                    free(data);
+                }
             }
         } else {
-            printf("OK> \n");
+            printf("OK \n");
         }
     }
 }

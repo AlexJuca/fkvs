@@ -1,11 +1,11 @@
 #include "config.h"
 #include "client.h"
 #include "utils.h"
-#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef SERVER
 server_t loadServerConfig(const char *path)
 {
     FILE *config =
@@ -15,7 +15,6 @@ server_t loadServerConfig(const char *path)
         ERROR_AND_EXIT("Failed to open server config file: ");
     }
 
-    server_t server;
     server.numClients = 0;
 
     char line[1024];
@@ -77,7 +76,9 @@ server_t loadServerConfig(const char *path)
     fclose(config);
     return server;
 }
+#endif
 
+#ifdef CLI
 client_t loadClientConfig(const char *path)
 {
     FILE *config =
@@ -118,3 +119,4 @@ client_t loadClientConfig(const char *path)
 
     return client;
 }
+#endif

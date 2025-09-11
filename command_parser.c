@@ -27,7 +27,7 @@ unsigned char *construct_set_command(const char *key, const char *value,
     binary_cmd[4] = key_len & 0xFF;
     memcpy(&binary_cmd[5], key, key_len);
 
-    size_t pos = 5 + key_len;
+    const size_t pos = 5 + key_len;
     binary_cmd[pos + 0] = (value_len >> 8) & 0xFF;
     binary_cmd[pos + 1] = value_len & 0xFF;
     memcpy(&binary_cmd[pos + 2], value, value_len);
@@ -38,7 +38,7 @@ unsigned char *construct_set_command(const char *key, const char *value,
 unsigned char *construct_get_command(const char *key, size_t *command_len)
 {
     size_t key_len = strlen(key);
-    size_t core_cmd_len = 3 + key_len;
+    const size_t core_cmd_len = 3 + key_len;
     *command_len = 2 + core_cmd_len;
 
     unsigned char *binary_cmd = malloc(*command_len);
@@ -59,7 +59,7 @@ unsigned char *construct_get_command(const char *key, size_t *command_len)
 unsigned char *construct_incr_command(const char *key, size_t *command_len)
 {
     size_t key_len = strlen(key);
-    size_t core_cmd_len = 3 + key_len;
+    const size_t core_cmd_len = 3 + key_len;
     *command_len = 2 + core_cmd_len;
 
     unsigned char *binary_cmd = malloc(*command_len);
@@ -73,6 +73,27 @@ unsigned char *construct_incr_command(const char *key, size_t *command_len)
     binary_cmd[3] = (key_len >> 8) & 0xFF;
     binary_cmd[4] = key_len & 0xFF;
     memcpy(&binary_cmd[5], key, key_len);
+
+    return binary_cmd;
+}
+
+unsigned char *construct_ping_command(const char *value, size_t *command_len)
+{
+    const size_t value_len = strlen(value);
+    const size_t core_cmd_len = 3 + value_len;
+    *command_len = 2 + core_cmd_len;
+
+    unsigned char *binary_cmd = malloc(*command_len);
+    if (!binary_cmd) {
+        return NULL;
+    }
+
+    binary_cmd[0] = (core_cmd_len >> 8) & 0xFF;
+    binary_cmd[1] = core_cmd_len & 0xFF;
+    binary_cmd[2] = CMD_PING;
+    binary_cmd[3] = (value_len >> 8) & 0xFF;
+    binary_cmd[4] = value_len & 0xFF;
+    memcpy(&binary_cmd[5], value, value_len);
 
     return binary_cmd;
 }

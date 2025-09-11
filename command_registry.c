@@ -1,4 +1,5 @@
 #include "command_registry.h"
+#include "command_defs.h"
 #include "response_defs.h"
 #include "utils.h"
 #include <stdio.h>
@@ -60,6 +61,25 @@ void send_reply(const int client_fd, const unsigned char *buffer,
     reply[3] = (bytes_read >> 8) & 0xFF;
     reply[4] = bytes_read & 0xFF;
     memcpy(&reply[5], buffer, bytes_read);
+
+    send(client_fd, reply, full_frame_length, 0);
+    free(reply);
+}
+
+void send_pong(const int client_fd, const unsigned char *buffer)
+{
+    const size_t value_len = buffer[3] << 8 | buffer[4];
+    const size_t core_cmd_len = 1 + 2 + value_len;
+    const size_t full_frame_length = 2 + core_cmd_len;
+
+    unsigned char *reply = malloc(full_frame_length);
+
+    reply[0] = (core_cmd_len >> 8) & 0xFF;
+    reply[1] = core_cmd_len & 0xFF;
+    reply[2] = CMD_PING;
+    reply[3] = (value_len >> 8) & 0xFF;
+    reply[4] = value_len & 0xFF;
+    memcpy(&reply[5], &buffer[5], value_len);
 
     send(client_fd, reply, full_frame_length, 0);
     free(reply);

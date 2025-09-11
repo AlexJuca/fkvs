@@ -13,4 +13,6 @@ unsigned char *construct_get_command(const char *key, size_t *command_len);
 
 unsigned char *construct_incr_command(const char *key, size_t *command_len);
 
+unsigned char *construct_ping_command(const char *value, size_t *command_len);
+
 #endif // COMMAND_PARSER_H

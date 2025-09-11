@@ -1,9 +1,8 @@
-#include "config.c"
+#include "config.h"
 #include "event_dispatcher.h"
 #include "hashtable.h"
-#include "list.c"
 #include "list.h"
-#include "network.c"
+#include "networking.h"
 #include "server_command_handlers.h"
 #include "utils.h"
 #include <errno.h>
@@ -16,7 +15,6 @@
 #include <sys/select.h>
 #include <sys/types.h>
 #include <sys/utsname.h>
-#include <time.h>
 #include <unistd.h>
 
 /* Global Server instance */
@@ -161,9 +159,6 @@ int main(int argc, char *argv[])
         if (server.verbose) {
             LOG("Current process id: ");
         }
-
-        time(&ct);
-        printf("Server started at: %s", ctime(&ct));
     }
 
     setup_client_list();

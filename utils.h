@@ -1,13 +1,12 @@
 #ifndef UTILS_H
 #define UTILS_H
 
+#include "main.h"
 #include "server.h"
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-
-extern server_t server;
 
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 

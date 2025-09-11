@@ -1,16 +1,20 @@
+#include "networking.h"
 #include "client.h"
-#include "server.h"
+#include "utils.h"
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <stdio.h>
-#include <stdlib.h>
+#include <time.h>
 #include <unistd.h>
 
-#define BACKLOG 10 // Number of allowed connections
+#define BACKLOG 4096 // Number of allowed connections
 
+#ifdef SERVER
 int start_server(server_t *server)
 {
+    time_t ct;
+    time(&ct);
     int server_fd;
     struct sockaddr_in server_addr;
 
@@ -39,10 +43,12 @@ int start_server(server_t *server)
         return -1;
     }
 
-    printf("listening on port %d \n", server->port);
+    LOG("Ready to accept connections via tcp");
     return server_fd;
 }
+#endif
 
+#ifdef CLI
 int start_client(client_t *client)
 {
     int client_fd;
@@ -74,3 +80,4 @@ int start_client(client_t *client)
     printf("Connected to server on port %d\n", client->port);
     return client_fd;
 }
+#endif

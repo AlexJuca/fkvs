@@ -1,7 +1,7 @@
 #include "client.h"
 #include "client_command_handlers.h"
 #include "config.h"
-#include "network.c"
+#include "networking.c"
 #include "utils.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,7 +11,7 @@ void run_repl(client_t client)
 {
     char command[BUFFER_SIZE];
 
-    printf("Connected to server. Type 'exit' to quit.\n");
+    printf("Type 'exit' to quit.\n");
     while (1) {
         printf("%s:%d> ", client.ip_address, client.port);
         if (fgets(command, BUFFER_SIZE, stdin) == NULL) {

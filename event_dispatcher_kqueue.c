@@ -19,8 +19,6 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-extern server_t server;
-
 #define MAX_EVENTS 4096
 
 static void set_nonblocking(const int fd)
@@ -227,8 +225,8 @@ int run_event_loop(int server_fd)
             // Fallback: if udata is missing, find by fd (kept for
             // compatibility).
             if (!c) {
-                list_node_t *node = listFindNode(server.clients, NULL,
-                                                 (void *)(intptr_t)ident_fd);
+                const list_node_t *node = listFindNode(
+                    server.clients, NULL, (void *)(intptr_t)ident_fd);
                 c = node ? (client_t *)node->val : NULL;
                 if (!c) {
                     // Unknown fd; close it defensively.
