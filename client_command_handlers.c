@@ -84,7 +84,9 @@ void cmd_ping(const command_args_t args, void (*response_cb)(client_t *client))
     if (!strcasecmp(args.cmd, "PING")) {
         size_t cmd_len;
         char *value = NULL;
-
+        // TODO: I'm not happy with this solution, refactor this in future and
+        // handle edge cases, when value has a space
+        // in the middle, e.g, PING "hello world"
         char *token = strtok(NULL, " ");
         if (token != NULL) {
             if (token[0] == '"') {
@@ -184,7 +186,7 @@ void command_response_handler(client_t *client)
                 }
             }
         } else {
-            printf("OK \n");
+            printf("(nil) \n");
         }
     }
 }

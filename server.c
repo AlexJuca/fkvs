@@ -81,12 +81,12 @@ void print_version_and_exit()
     printf("fkvs v0.0.1 \n");
     printf("running on %s, %s \n", buffer.sysname, buffer.machine);
 
-    exit(0);
+    exit(1);
 }
 
 void handle_sigint(int sig)
 {
-    printf("\nCaught signal interrupt %d, shutting down server.\n", sig);
+    LOG("Caught signal interrupt, shutting down server.");
     // Ensure we close all client connections
     const list_node_t *current = server.clients->head;
     while (current != NULL) {
