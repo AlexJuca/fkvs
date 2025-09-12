@@ -11,6 +11,9 @@
 #define BACKLOG 4096 // Number of allowed connections
 
 #ifdef SERVER
+
+#include "command_registry.h"
+
 int start_server(server_t *server)
 {
     time_t ct;
@@ -46,6 +49,54 @@ int start_server(server_t *server)
     LOG("Ready to accept connections via tcp");
     return server_fd;
 }
+
+void try_process_frames(client_t *c)
+{
+    // Parse as many complete frames as possible.
+    if (server.verbose) {
+        printf("Attempting to process frames");
+    }
+    for (;;) {
+        if (c->buf_used < 2)
+            return; // need length prefix
+
+        if (c->frame_need < 0) {
+            uint16_t core_len = ((uint16_t)c->buffer[0] << 8) | c->buffer[1];
+            c->frame_need =
+                2 + (ssize_t)core_len; // total frame bytes (prefix + core)
+            if ((size_t)c->frame_need > sizeof(c->buffer)) {
+                fprintf(stderr, "Frame too large: %zd > %zu\n", c->frame_need,
+                        sizeof(c->buffer));
+                // Drop the buffer contents to resync; caller should disconnect
+                // the client.
+                c->buf_used = 0;
+                c->frame_need = -1;
+                return;
+            }
+        }
+
+        if ((ssize_t)c->buf_used < c->frame_need)
+            return; // incomplete frame; we wait for more data
+
+        // We have a complete frame.
+        const size_t frame_len = (size_t)c->frame_need;
+
+        if (server.verbose) {
+            printf("Complete frame (%zu bytes) from fd=%d\n", frame_len, c->fd);
+        }
+
+        // Dispatch exactly one frame.
+        dispatch_command(c->fd, c->buffer, frame_len);
+
+        // Shift any remaining bytes (back-to-back frames).
+        size_t remain = c->buf_used - frame_len;
+        if (remain)
+            memmove(c->buffer, c->buffer + frame_len, remain);
+        c->buf_used = remain;
+        c->frame_need = -1; // recompute for next frame
+    }
+}
+
 #endif
 
 #ifdef CLI

@@ -4,6 +4,7 @@
 #include "command_registry.h"
 #include "event_dispatcher.h"
 #include "list.h"
+#include "networking.h"
 #include "server.h"
 #include "utils.h"
 #include <arpa/inet.h>
@@ -59,56 +60,48 @@ static void close_and_drop_client(const int kq, client_t *c)
     }
 
     close(c->fd);
+    free(c);
 }
 
-static void try_process_frames(client_t *c)
+client_t *init_client(const int client_fd, struct sockaddr_storage ss)
 {
-    // Parse as many complete frames as possible.
-    if (server.verbose) {
-        printf("Attempting to process frames");
+    client_t *client = calloc(1, sizeof(*client));
+
+    if (!client) {
+        perror("calloc client");
+        close(client_fd);
+        return NULL;
     }
-    for (;;) {
-        if (c->buf_used < 2)
-            return; // need length prefix
 
-        if (c->frame_need < 0) {
-            uint16_t core_len = ((uint16_t)c->buffer[0] << 8) | c->buffer[1];
-            c->frame_need =
-                2 + (ssize_t)core_len; // total frame bytes (prefix + core)
-            if ((size_t)c->frame_need > sizeof(c->buffer)) {
-                fprintf(stderr, "Frame too large: %zd > %zu\n", c->frame_need,
-                        sizeof(c->buffer));
-                // Drop the buffer contents to resync; caller should disconnect
-                // the client.
-                c->buf_used = 0;
-                c->frame_need = -1;
-                return;
-            }
-        }
+    client->fd = client_fd;
+    client->buf_used = 0;
+    client->frame_need = -1;
+    client->ip_str[0] = '\0';
+    client->ip_address =
+        client
+            ->ip_str; // conform to struct; alias to ip_str for now, then remove
+    client->port = 0;
 
-        if ((ssize_t)c->buf_used < c->frame_need)
-            return; // incomplete frame; we wait for more data
-
-        // We have a complete frame.
-        const size_t frame_len = (size_t)c->frame_need;
-
-        if (server.verbose) {
-            printf("Complete frame (%zu bytes) from fd=%d\n", frame_len, c->fd);
-        }
-
-        // Dispatch exactly one frame.
-        dispatch_command(c->fd, c->buffer, frame_len);
-
-        // Shift any remaining bytes (back-to-back frames).
-        size_t remain = c->buf_used - frame_len;
-        if (remain)
-            memmove(c->buffer, c->buffer + frame_len, remain);
-        c->buf_used = remain;
-        c->frame_need = -1; // recompute for next frame
+    // Peer address → ip_str & port
+    if (ss.ss_family == AF_INET) {
+        struct sockaddr_in *sin = (struct sockaddr_in *)&ss;
+        inet_ntop(AF_INET, &sin->sin_addr, client->ip_str,
+                  sizeof(client->ip_str));
+        client->port = (int)ntohs(sin->sin_port);
+    } else if (ss.ss_family == AF_INET6) {
+        struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)&ss;
+        inet_ntop(AF_INET6, &sin6->sin6_addr, client->ip_str,
+                  sizeof(client->ip_str));
+        client->port = (int)ntohs(sin6->sin6_port);
+    } else {
+        snprintf(client->ip_str, sizeof(client->ip_str), "unknown");
+        client->port = 0;
     }
+
+    return client;
 }
 
-int run_event_loop(int server_fd)
+int run_event_loop(const int server_fd)
 {
     if (server.verbose) {
         printf("Connected clients: %d\n", (int)server.numClients);
@@ -134,7 +127,7 @@ int run_event_loop(int server_fd)
     struct kevent evs[MAX_EVENTS];
 
     for (;;) {
-        int n = kevent(kq, NULL, 0, evs, MAX_EVENTS, NULL);
+        const int n = kevent(kq, NULL, 0, evs, MAX_EVENTS, NULL);
         if (n < 0) {
             if (errno == EINTR)
                 continue;
@@ -163,39 +156,7 @@ int run_event_loop(int server_fd)
                     set_nonblocking(cfd);
                     set_tcp_no_delay(cfd);
 
-                    // TODO: We probably want to move the client construction
-                    // out of here, since this is not the direct responsibility
-                    // of the event loop.
-                    client_t *c = (client_t *)calloc(1, sizeof(*c));
-                    if (!c) {
-                        perror("calloc client");
-                        close(cfd);
-                        continue;
-                    }
-
-                    c->fd = cfd;
-                    c->buf_used = 0;
-                    c->frame_need = -1;
-                    c->ip_str[0] = '\0';
-                    c->ip_address =
-                        c->ip_str; // conform to struct; alias to ip_str
-                    c->port = 0;
-
-                    // Peer address → ip_str & port
-                    if (ss.ss_family == AF_INET) {
-                        struct sockaddr_in *sin = (struct sockaddr_in *)&ss;
-                        inet_ntop(AF_INET, &sin->sin_addr, c->ip_str,
-                                  sizeof(c->ip_str));
-                        c->port = (int)ntohs(sin->sin_port);
-                    } else if (ss.ss_family == AF_INET6) {
-                        struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)&ss;
-                        inet_ntop(AF_INET6, &sin6->sin6_addr, c->ip_str,
-                                  sizeof(c->ip_str));
-                        c->port = (int)ntohs(sin6->sin6_port);
-                    } else {
-                        snprintf(c->ip_str, sizeof(c->ip_str), "unknown");
-                        c->port = 0;
-                    }
+                    client_t *c = init_client(cfd, ss);
 
                     server.clients = listAddNodeToTail(server.clients, c);
                     server.numClients += 1;
