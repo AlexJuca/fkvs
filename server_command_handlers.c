@@ -6,6 +6,7 @@
 #include "utils.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/errno.h>
 #include <sys/socket.h>
 
 static HashTable *table = NULL;
@@ -16,6 +17,7 @@ void init_command_handlers(HashTable *ht)
     register_command(CMD_SET, handle_set_command);
     register_command(CMD_GET, handle_get_command);
     register_command(CMD_INCR, handle_incr_command);
+    register_command(CMD_INCR_BY, handle_incr_by_command);
     register_command(CMD_PING, handle_ping_command);
 }
 
@@ -28,15 +30,15 @@ void handle_set_command(int client_fd, unsigned char *buffer, size_t bytes_read)
     }
     // Need at least: core_len(2) + cmd(1) + key_len(2)
     if (bytes_read < 5) {
-        unsigned char fail[] = {STATUS_FAILURE};
+        const unsigned char fail[] = {STATUS_FAILURE};
         (void)send(client_fd, fail, sizeof fail, 0);
         fprintf(stderr, "Incomplete SET: header too short\n");
         return;
     }
 
     // Total bytes expected = 2 + core_len
-    uint16_t core_len = ((uint16_t)buffer[0] << 8) | buffer[1];
-    size_t total_needed = (size_t)core_len + 2;
+    const uint16_t core_len = ((uint16_t)buffer[0] << 8) | buffer[1];
+    const size_t total_needed = (size_t)core_len + 2;
     if (bytes_read < total_needed) {
         unsigned char fail[] = {STATUS_FAILURE};
         (void)send(client_fd, fail, sizeof fail, 0);
@@ -45,9 +47,8 @@ void handle_set_command(int client_fd, unsigned char *buffer, size_t bytes_read)
         return;
     }
 
-    // Command byte
     if (buffer[2] != CMD_SET) {
-        unsigned char fail[] = {STATUS_FAILURE};
+        const unsigned char fail[] = {STATUS_FAILURE};
         (void)send(client_fd, fail, sizeof fail, 0);
         fprintf(stderr, "SET parse error: wrong command byte (%u)\n",
                 (unsigned)buffer[2]);
@@ -55,16 +56,16 @@ void handle_set_command(int client_fd, unsigned char *buffer, size_t bytes_read)
     }
 
     // Key length
-    uint16_t key_len = ((uint16_t)buffer[3] << 8) | buffer[4];
+    const uint16_t key_len = ((uint16_t)buffer[3] << 8) | buffer[4];
 
     // Offsets inside the full buffer
-    size_t pos_key = 5;                   // start of key bytes
-    size_t after_key = pos_key + key_len; // first byte after key
+    const size_t pos_key = 5;                   // start of key bytes
+    const size_t after_key = pos_key + key_len; // first byte after key
 
     // Ensure key bytes are present inside the advertised core
-    // Core payload layout size up to the end of key_len field is: 1(cmd) +
+    // payload layout size up to the end of key_len field is: 1(cmd) +
     // 2(key_len) + key_len
-    size_t min_core_up_to_key = (size_t)1 + 2 + key_len;
+    const size_t min_core_up_to_key = (size_t)1 + 2 + key_len;
     if (min_core_up_to_key > core_len) {
         send_error(client_fd);
         fprintf(stderr, "Incomplete SET: key bytes exceed core_len\n");
@@ -81,12 +82,12 @@ void handle_set_command(int client_fd, unsigned char *buffer, size_t bytes_read)
     // Value length lives immediately after the key
     uint16_t value_len =
         ((uint16_t)buffer[after_key] << 8) | buffer[after_key + 1];
-    size_t pos_value = after_key + 2; // start of value bytes
-    size_t end_value = pos_value + value_len;
+    const size_t pos_value = after_key + 2; // start of value bytes
+    const size_t end_value = pos_value + value_len;
 
     // Check that the whole value fits inside the *advertised* core and the
     // received buffer
-    size_t core_payload_size = (size_t)1 + 2 + key_len + 2 + value_len;
+    const size_t core_payload_size = (size_t)1 + 2 + key_len + 2 + value_len;
     if (core_payload_size > core_len || (end_value + 0) > bytes_read) {
         send_error(client_fd);
         fprintf(stderr, "Incomplete SET: value bytes exceed bounds\n");
@@ -104,13 +105,14 @@ void handle_set_command(int client_fd, unsigned char *buffer, size_t bytes_read)
     set_value(table, &buffer[pos_key], key_len, &buffer[pos_value], value_len);
 
     send_reply(client_fd, buffer, value_len);
+    free(data);
 }
 
 void handle_get_command(int client_fd, unsigned char *buffer, size_t bytes_read)
 {
-    size_t command_len = buffer[0] << 8 | buffer[1];
+    const size_t command_len = buffer[0] << 8 | buffer[1];
 
-    size_t key_len = buffer[3] << 8 | buffer[4];
+    const size_t key_len = buffer[3] << 8 | buffer[4];
 
     if (bytes_read - 2 == command_len) {
         unsigned char *value;
@@ -130,45 +132,156 @@ void handle_get_command(int client_fd, unsigned char *buffer, size_t bytes_read)
 void handle_incr_command(int client_fd, unsigned char *buffer,
                          size_t bytes_read)
 {
-    size_t command_len = buffer[0] << 8 | buffer[1];
+    const size_t command_len = (buffer[0] << 8) | buffer[1];
+    const size_t key_len = (buffer[3] << 8) | buffer[4];
 
-    size_t key_len = buffer[3] << 8 | buffer[4];
-
-    if (bytes_read - 2 == command_len) {
-        unsigned char *value;
-        size_t value_len;
-        if (get_value(table, &buffer[5], key_len, &value, &value_len)) {
-            if (!is_integer(value, value_len)) {
-                fprintf(stderr, "value is not an integer.\n");
-                send_error(client_fd);
-                free(value);
-                return;
-            }
-
-            if (!set_value(table, &buffer[5], key_len, value, value_len)) {
-                fprintf(stderr, "unable to increment value.\n");
-            }
-
-            char *ptr;
-            const long long parsed_value =
-                strtoll((const char *)value, &ptr, 10);
-
-            const uint64_t number = (uint64_t)parsed_value + 1;
-            unsigned char *incremented_number =
-                (unsigned char *)int_to_string(number);
-
-            set_value(table, &buffer[5], key_len, incremented_number,
-                      value_len);
-            send_reply(client_fd, incremented_number, value_len);
-
-            free(value);
-        } else {
-            send_error(client_fd);
-        }
-    } else {
-        fprintf(stderr, "Incomplete command data for GET.\n");
+    if (bytes_read - 2 != command_len) {
+        fprintf(stderr, "Incomplete command data for INCR.\n");
         send_error(client_fd);
+        return;
     }
+
+    unsigned char *value;
+    size_t value_len;
+
+    if (!get_value(table, &buffer[5], key_len, &value, &value_len)) {
+        send_error(client_fd);
+        return;
+    }
+
+    if (!is_integer(value, value_len)) {
+        fprintf(stderr, "Stored value is not an integer.\n");
+        send_error(client_fd);
+        free(value);
+        return;
+    }
+
+    // Null-terminate stored value
+    char *old_str = strndup((const char *)value, value_len);
+    if (!old_str) {
+        fprintf(stderr, "Allocation failed.\n");
+        send_error(client_fd);
+        free(value);
+        return;
+    }
+
+    const char one_str[] = "1";
+    char *result_str = add_strings(old_str, one_str);
+    if (!result_str) {
+        send_error(client_fd);
+        free(value);
+        free(old_str);
+        return;
+    }
+
+    const size_t result_len = strlen(result_str);
+
+    if (!set_value(table, &buffer[5], key_len, (unsigned char *)result_str,
+                   result_len)) {
+        fprintf(stderr, "Unable to set incremented value.\n");
+        send_error(client_fd);
+        free(value);
+        free(old_str);
+        free(result_str);
+        return;
+    }
+
+    send_reply(client_fd, (unsigned char *)result_str, result_len);
+
+    free(value);
+    free(old_str);
+    free(result_str);
+}
+
+void handle_incr_by_command(int client_fd, unsigned char *buffer,
+                            size_t bytes_read)
+{
+    const size_t command_len = (buffer[0] << 8) | buffer[1];
+    const size_t key_len = (buffer[3] << 8) | buffer[4];
+    const size_t pos = 5 + key_len;
+
+    if (pos + 2 > bytes_read) {
+        fprintf(stderr, "Invalid buffer: too short for value length.\n");
+        send_error(client_fd);
+        return;
+    }
+
+    const size_t incr_len = (buffer[pos] << 8) | buffer[pos + 1];
+    if (pos + 2 + incr_len > bytes_read) {
+        fprintf(stderr, "Invalid buffer: too short for increment.\n");
+        send_error(client_fd);
+        return;
+    }
+
+    const unsigned char *incr_str = &buffer[pos + 2];
+
+    if (!is_integer(incr_str, incr_len)) {
+        fprintf(stderr, "Increment value is not an integer.\n");
+        send_error(client_fd);
+        return;
+    }
+
+    if (bytes_read - 2 != command_len) {
+        fprintf(stderr, "Incomplete command data for INCR_BY.\n");
+        send_error(client_fd);
+        return;
+    }
+
+    unsigned char *old_value;
+    size_t old_value_len;
+    if (!get_value(table, &buffer[5], key_len, &old_value, &old_value_len)) {
+        send_error(client_fd);
+        return;
+    }
+
+    if (!is_integer(old_value, old_value_len)) {
+        fprintf(stderr, "Stored value is not an integer.\n");
+        send_error(client_fd);
+        free(old_value);
+        return;
+    }
+
+    // Null-terminate both old and incr strings
+    char *old_str = strndup((const char *)old_value, old_value_len);
+    char *incr_dup = strndup((const char *)incr_str, incr_len);
+
+    if (!old_str || !incr_dup) {
+        fprintf(stderr, "Allocation failed.\n");
+        send_error(client_fd);
+        free(old_value);
+        free(old_str);
+        free(incr_dup);
+        return;
+    }
+
+    char *result_str = add_strings(old_str, incr_dup);
+    if (!result_str) {
+        send_error(client_fd);
+        free(old_value);
+        free(old_str);
+        free(incr_dup);
+        return;
+    }
+
+    const size_t result_len = strlen(result_str);
+
+    if (!set_value(table, &buffer[5], key_len, (unsigned char *)result_str,
+                   result_len)) {
+        fprintf(stderr, "Unable to set incremented value.\n");
+        send_error(client_fd);
+        free(old_value);
+        free(old_str);
+        free(incr_dup);
+        free(result_str);
+        return;
+    }
+
+    send_reply(client_fd, (unsigned char *)result_str, result_len);
+
+    free(old_value);
+    free(old_str);
+    free(incr_dup);
+    free(result_str);
 }
 
 void handle_ping_command(int client_fd, unsigned char *buffer,

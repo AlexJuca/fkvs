@@ -79,6 +79,34 @@ void cmd_inc(const command_args_t args, void (*response_cb)(client_t *client))
     }
 }
 
+void cmd_incr_by(const command_args_t args,
+                 void (*response_cb)(client_t *client))
+{
+    if (!strcasecmp(args.cmd, "INCRBY")) {
+        const char *key = strtok(NULL, " ");
+        const char *value = strtok(NULL, " ");
+
+        if (key == NULL || value == NULL) {
+            printf(
+                "(error) ERR wrong number of arguments for 'incrby' command\n");
+            printf("(info) Usage: INCRBY <key> <value>\n");
+            return;
+        }
+
+        size_t cmd_len;
+        unsigned char *binary_cmd =
+            construct_incr_by_command(key, value, &cmd_len);
+        if (binary_cmd == NULL) {
+            fprintf(stderr, "(error) Failed to construct INCR command\n");
+            return;
+        }
+
+        send(args.client->fd, binary_cmd, cmd_len, 0);
+        free(binary_cmd);
+        response_cb(args.client);
+    }
+}
+
 void cmd_ping(const command_args_t args, void (*response_cb)(client_t *client))
 {
     if (!strcasecmp(args.cmd, "PING")) {
@@ -127,17 +155,17 @@ void cmd_ping(const command_args_t args, void (*response_cb)(client_t *client))
 void cmd_unknown(const command_args_t args,
                  void (*response_cb)(client_t *client))
 {
-    if (strcasecmp(args.cmd, "INCR") & strcasecmp(args.cmd, "GET") &
-        strcasecmp(args.cmd, "SET") & strcasecmp(args.cmd, "PING")) {
+    if (strcasecmp(args.cmd, "INCR") &&
+        strcasecmp(args.cmd, "INCRBY") & strcasecmp(args.cmd, "GET") &
+            strcasecmp(args.cmd, "SET") & strcasecmp(args.cmd, "PING")) {
         printf("Unknown command \n");
     }
 }
 
-const cmd_t command_table[] = {{"cmd_set", cmd_set},
-                               {"cmd_get", cmd_get},
-                               {"cmd_inc", cmd_inc},
-                               {"cmd_ping", cmd_ping},
-                               {"cmd_unknown", cmd_unknown}};
+const cmd_t command_table[] = {
+    {"cmd_set", cmd_set},   {"cmd_get", cmd_get},
+    {"cmd_inc", cmd_inc},   {"cmd_incr_by", cmd_incr_by},
+    {"cmd_ping", cmd_ping}, {"cmd_unknown", cmd_unknown}};
 
 void execute_command(const char *cmd, client_t *client,
                      void (*response_cb)(client_t *client))

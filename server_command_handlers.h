@@ -14,6 +14,9 @@ void handle_get_command(int client_fd, unsigned char *buffer,
 void handle_incr_command(int client_fd, unsigned char *buffer,
                          size_t bytes_read);
 
+void handle_incr_by_command(int client_fd, unsigned char *buffer,
+                            size_t bytes_read);
+
 void handle_ping_command(int client_fd, unsigned char *buffer,
                          size_t bytes_read);
 

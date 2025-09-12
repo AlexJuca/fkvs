@@ -6,6 +6,7 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
@@ -89,6 +90,55 @@ static char *int_to_string(const uint64_t number)
 
     snprintf(buffer, 22, "%" PRIu64, number);
     return buffer;
+}
+
+// Adds two decimal integer strings (can include leading '+' or '-')
+// Returns a newly allocated string with the exact result.
+static char *add_strings(const char *a, const char *b)
+{
+    // TODO: Handle signs: currently we'll only support non-negative for
+    // simplicity.
+    if (a[0] == '-' || b[0] == '-') {
+        fprintf(stderr, "Negative values not supported yet.\n");
+        return NULL;
+    }
+
+    const size_t len_a = strlen(a);
+    const size_t len_b = strlen(b);
+    const size_t max_len =
+        (len_a > len_b ? len_a : len_b) + 1; // +1 for possible carry
+
+    char *result = malloc(max_len + 1);
+    if (!result)
+        return NULL;
+    result[max_len] = '\0';
+
+    int carry = 0;
+    ssize_t i = len_a - 1;
+    ssize_t j = len_b - 1;
+    ssize_t k = max_len - 1;
+
+    while (i >= 0 || j >= 0 || carry > 0) {
+        const int digit_a = (i >= 0) ? a[i--] - '0' : 0;
+        const int digit_b = (j >= 0) ? b[j--] - '0' : 0;
+        const int sum = digit_a + digit_b + carry;
+
+        carry = sum / 10;
+        result[k--] = (sum % 10) + '0';
+    }
+
+    // Shift result left if leading zeros
+    const char *final = result + k + 1;
+    const size_t final_len = strlen(final);
+    char *cleaned = malloc(final_len + 1);
+    if (!cleaned) {
+        free(result);
+        return NULL;
+    }
+    memcpy(cleaned, final, final_len + 1);
+
+    free(result);
+    return cleaned;
 }
 
 #define LOG(ctx) log(ctx)
