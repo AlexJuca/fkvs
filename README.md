@@ -44,9 +44,7 @@ This guarantees:
 ## Running inside docker
 
 ```shell
-docker build -t fkvs:latest -f Dockerfile .
-
-docker run -it -p 5995:5995 fkvs:latest /bin/sh   
+docker build -t fkvs:latest -f Dockerfile .  
 
 docker run --rm -it -p 5995:5995 fkvs:latest
 ```
