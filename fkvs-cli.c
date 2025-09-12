@@ -2,7 +2,6 @@
 #include "client_command_handlers.h"
 #include "config.h"
 #include "networking.c"
-#include "utils.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

@@ -24,6 +24,8 @@ static void warn(const char *ctx, const char *file, int line)
     perror(ctx);
 }
 
+#ifdef SERVER
+
 // TODO: When process is running as a daemon, ensure we don't print to standard
 // file descriptors rather we should write to a log file.
 static inline void append_to_log_file(char *ctx) {}
@@ -38,12 +40,12 @@ static void log_std_out(char *ctx)
     fprintf(stdout, "%s - %s \n", ts, ctx);
 }
 
-static void log(char *ctx)
+static void _log(char *ctx)
 {
     server.daemonize ? append_to_log_file(ctx) : log_std_out(ctx);
 }
 
-void inline print_binary_data(const unsigned char *data, const size_t len)
+static void print_binary_data(const unsigned char *data, const size_t len)
 {
     for (size_t j = 0; j < len; j++) {
         const unsigned char c = data[j];
@@ -141,7 +143,9 @@ static char *add_strings(const char *a, const char *b)
     return cleaned;
 }
 
-#define LOG(ctx) log(ctx)
+#endif
+
+#define LOG_INFO(ctx) _log(ctx)
 #define ERROR_AND_EXIT(ctx) error_and_exit((ctx), __FILE__, __LINE__)
 #define WARN(ctx) warn((ctx), __FILE__, __LINE__)
 

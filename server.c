@@ -86,7 +86,7 @@ void print_version_and_exit()
 
 void handle_sigint(int sig)
 {
-    LOG("Caught signal interrupt, shutting down server.");
+    LOG_INFO("Caught signal interrupt, shutting down server.");
     // Ensure we close all client connections
     const list_node_t *current = server.clients->head;
     while (current != NULL) {
@@ -155,9 +155,9 @@ int main(int argc, char *argv[])
             show_logo();
         }
 
-        LOG("Server starting");
+        LOG_INFO("Server starting");
         if (server.verbose) {
-            LOG("Current process id: ");
+            LOG_INFO("Current process id: ");
         }
     }
 

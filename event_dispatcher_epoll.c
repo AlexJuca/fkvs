@@ -1,7 +1,18 @@
 #if defined(__linux__)
 
+#include "client.h"
+#include "command_registry.h"
 #include "event_dispatcher.h"
+#include "list.h"
+#include "networking.h"
+#include "server.h"
+#include "utils.h"
+
+#include <arpa/inet.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,96 +21,194 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-// TODO: Ensure we track the number connected clients
-// TODO: Update this so it works on linux, I haven't been giving the
-// linux event loop the love it needs :(.
-
-#define MAX_EVENTS 4096
-
-int run_event_loop(int server_fd)
+static void close_and_drop_client(const int epfd, client_t *c)
 {
-    int epoll_fd = epoll_create1(0);
-    if (epoll_fd == -1) {
-        perror("epoll_create1");
-        exit(EXIT_FAILURE);
+    if (!c)
+        return;
+
+    if (server.verbose) {
+        printf("Dropping client fd=%d (%s:%d)\n", c->fd, c->ip_str, c->port);
     }
 
-    struct epoll_event event;
-    event.events = EPOLLIN;
-    event.data.fd = server_fd;
-    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, server_fd, &event) == -1) {
-        perror("epoll_ctl");
-        exit(EXIT_FAILURE);
+    struct epoll_event ev;
+    memset(&ev, 0, sizeof(ev));
+    epoll_ctl(epfd, EPOLL_CTL_DEL, c->fd, &ev);
+
+    list_node_t *node =
+        listFindNode(server.clients, NULL, (void *)(intptr_t)c->fd);
+    if (node) {
+        listDeleteNode(server.clients, node);
+        free(node->val); // free(client_t) allocated for list storage if any
+        server.numClients -= 1;
+    }
+
+    close(c->fd);
+    free(c);
+}
+
+int run_event_loop(const int server_fd)
+{
+    if (server.verbose) {
+        printf("Connected clients: %d\n", (int)server.numClients);
+    }
+
+    set_nonblocking(server_fd);
+
+    const int epfd = epoll_create1(0);
+    if (epfd == -1) {
+        perror("epoll_create1");
+        return -1;
+    }
+
+    struct epoll_event ev;
+    memset(&ev, 0, sizeof(ev));
+    ev.events = EPOLLIN | EPOLLET; // edge-triggered like EV_CLEAR
+    ev.data.fd = server_fd;
+    if (epoll_ctl(epfd, EPOLL_CTL_ADD, server_fd, &ev) == -1) {
+        perror("epoll_ctl (server)");
+        close(epfd);
+        return -1;
     }
 
     struct epoll_event events[MAX_EVENTS];
-    while (1) {
-        int n = epoll_wait(epoll_fd, events, MAX_EVENTS, -1);
+
+    for (;;) {
+        const int n = epoll_wait(epfd, events, MAX_EVENTS, -1);
         if (n < 0) {
+            if (errno == EINTR)
+                continue;
             perror("epoll_wait");
-            exit(EXIT_FAILURE);
+            break;
         }
 
         for (int i = 0; i < n; i++) {
+            const uint32_t evt = events[i].events;
+
+            // New connections on the listening socket
             if (events[i].data.fd == server_fd) {
-                int client_fd = accept(server_fd, NULL, NULL);
-                if (client_fd == -1) {
-                    perror("accept");
-                    continue;
-                }
-
-                client_t *new_client = malloc(sizeof(client_t));
-                if (new_client == NULL) {
-                    perror("malloc");
-                    close(client_fd);
-                    continue;
-                }
-
-                new_client->name = NULL;
-                new_client->port =
-                    ntohs(((struct sockaddr_in *)&event.data.fd)->sin_port);
-                new_client->ip_address = NULL;
-                new_client->buffer[0] = '\0';
-                new_client->fd = client_fd;
-
-                printf("Accepted new client: %d\n", new_client->fd);
-                event.events = EPOLLIN;
-                event.data.ptr = new_client;
-                if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, client_fd, &event) ==
-                    -1) {
-                    perror("epoll_ctl: client");
-                    close(client_fd);
-                    free(new_client);
-                } else {
-                    server.clients =
-                        listAddNodeToTail(server.clients, new_client);
-                }
-            } else {
-                char buffer[1024];
-                client_t *client = (client_t *)events[i].data.ptr;
-                int bytes_read =
-                    read(client->fd, client->buffer, sizeof(client->buffer));
-
-                if (bytes_read <= 0) {
-                    client_t *client = (client_t *)events[i].data.ptr;
-                    printf("Closing connection %d\n", client->fd);
-                    list_node_t *node = listFindNode(
-                        server.clients, NULL, (void *)(intptr_t)client->fd);
-                    if (node) {
-                        listDeleteNode(server.clients, node);
-                        server.numClients -= 1;
+                for (;;) {
+                    struct sockaddr_storage ss;
+                    socklen_t slen = sizeof(ss);
+                    const int cfd =
+                        accept(server_fd, (struct sockaddr *)&ss, &slen);
+                    if (cfd < 0) {
+                        if (errno == EAGAIN || errno == EWOULDBLOCK)
+                            break;
+                        perror("accept");
+                        break;
                     }
-                    close(client->fd);
-                    free(client);
-                } else {
-                    // Dispatch the command to the appropriate handler based on
-                    // command registry
-                    dispatch_command(client->fd, client->buffer, bytes_read);
+
+                    set_nonblocking(cfd);
+                    set_tcp_no_delay(cfd);
+
+                    client_t *c = init_client(cfd, ss);
+                    if (!c) {
+                        // already closed by init_client on failure
+                        continue;
+                    }
+
+                    server.clients = listAddNodeToTail(server.clients, c);
+                    server.numClients += 1;
+
+                    if (server.verbose) {
+                        printf("Client connected fd=%d %s:%d (total=%d)\n",
+                               c->fd, c->ip_str, c->port,
+                               (int)server.numClients);
+                    }
+
+                    struct epoll_event cev;
+                    memset(&cev, 0, sizeof(cev));
+                    // EPOLLRDHUP to detect peer half-close; EPOLLHUP/ERR also
+                    // handled
+                    cev.events = EPOLLIN | EPOLLET | EPOLLRDHUP;
+                    cev.data.ptr = c; // stash client*
+                    if (epoll_ctl(epfd, EPOLL_CTL_ADD, c->fd, &cev) == -1) {
+                        perror("epoll_ctl add client");
+                        close_and_drop_client(epfd, c);
+                    }
+                }
+                continue;
+            }
+
+            // Existing client events
+            client_t *c = (client_t *)events[i].data.ptr;
+
+            // If somehow ptr is missing, try to find by fd (defensive)
+            if (!c && (evt & (EPOLLIN | EPOLLERR | EPOLLHUP | EPOLLRDHUP))) {
+                // We don't have ident fd here unless we store it; skip this
+                // path in practice. Could be extended by keeping fd in data.u32
+                // and mapping to client.
+                continue;
+            }
+
+            // Hangup/half-close/errors
+            if ((evt & EPOLLRDHUP) || (evt & EPOLLHUP) || (evt & EPOLLERR)) {
+                if (server.verbose) {
+                    printf("Client fd=%d closed (EPOLL flags=0x%x)\n",
+                           c ? c->fd : -1, evt);
+                }
+                close_and_drop_client(epfd, c);
+                continue;
+            }
+
+            // Drain readable data (edge-triggered)
+            if (evt & EPOLLIN) {
+                for (;;) {
+                    ssize_t nread = recv(c->fd, c->buffer + c->buf_used,
+                                         sizeof(c->buffer) - c->buf_used, 0);
+                    if (nread > 0) {
+                        c->buf_used += (size_t)nread;
+                        if (server.verbose) {
+                            printf("fd=%d read %zd bytes (buf_used=%zu)\n",
+                                   c->fd, nread, c->buf_used);
+                        }
+
+                        // Process as many complete frames as possible
+                        try_process_frames(c);
+
+                        // If buffer is full but frame needs more → protocol
+                        // error
+                        if (c->buf_used == sizeof(c->buffer) &&
+                            c->frame_need > 0 &&
+                            (ssize_t)c->buf_used < c->frame_need) {
+                            fprintf(stderr,
+                                    "fd=%d frame exceeds buffer capacity; "
+                                    "dropping client\n",
+                                    c->fd);
+                            close_and_drop_client(epfd, c);
+                            break;
+                        }
+
+                        // keep draining in this readiness window
+                        continue;
+                    }
+
+                    if (nread == 0) {
+                        if (server.verbose) {
+                            printf("Client fd=%d closed (recv=0)\n", c->fd);
+                        }
+                        close_and_drop_client(epfd, c);
+                        break;
+                    }
+
+                    if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                        // fully drained for now
+                        break;
+                    }
+                    if (errno == EINTR) {
+                        // retry
+                        continue;
+                    }
+
+                    perror("recv");
+                    close_and_drop_client(epfd, c);
+                    break;
                 }
             }
         }
     }
-    close(epoll_fd);
+
+    close(epfd);
     return 0;
 }
 

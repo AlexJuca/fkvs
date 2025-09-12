@@ -2,6 +2,7 @@
 #include "client.h"
 #include "utils.h"
 #include <arpa/inet.h>
+#include <fcntl.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <stdio.h>
@@ -46,8 +47,22 @@ int start_server(server_t *server)
         return -1;
     }
 
-    LOG("Ready to accept connections via tcp");
+    LOG_INFO("Ready to accept connections via tcp");
     return server_fd;
+}
+
+void set_tcp_no_delay(const int fd)
+{
+    const int one = 1;
+    (void)setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
+}
+
+void set_nonblocking(const int fd)
+{
+    int flags = fcntl(fd, F_GETFL, 0);
+    if (flags < 0)
+        flags = 0;
+    (void)fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
 
 void try_process_frames(client_t *c)

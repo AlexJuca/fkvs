@@ -20,22 +20,6 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#define MAX_EVENTS 4096
-
-static void set_nonblocking(const int fd)
-{
-    int flags = fcntl(fd, F_GETFL, 0);
-    if (flags < 0)
-        flags = 0;
-    (void)fcntl(fd, F_SETFL, flags | O_NONBLOCK);
-}
-
-static void set_tcp_no_delay(const int fd)
-{
-    const int one = 1;
-    (void)setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
-}
-
 static void close_and_drop_client(const int kq, client_t *c)
 {
     if (!c)
@@ -61,44 +45,6 @@ static void close_and_drop_client(const int kq, client_t *c)
 
     close(c->fd);
     free(c);
-}
-
-client_t *init_client(const int client_fd, struct sockaddr_storage ss)
-{
-    client_t *client = calloc(1, sizeof(*client));
-
-    if (!client) {
-        perror("calloc client");
-        close(client_fd);
-        return NULL;
-    }
-
-    client->fd = client_fd;
-    client->buf_used = 0;
-    client->frame_need = -1;
-    client->ip_str[0] = '\0';
-    client->ip_address =
-        client
-            ->ip_str; // conform to struct; alias to ip_str for now, then remove
-    client->port = 0;
-
-    // Peer address → ip_str & port
-    if (ss.ss_family == AF_INET) {
-        struct sockaddr_in *sin = (struct sockaddr_in *)&ss;
-        inet_ntop(AF_INET, &sin->sin_addr, client->ip_str,
-                  sizeof(client->ip_str));
-        client->port = (int)ntohs(sin->sin_port);
-    } else if (ss.ss_family == AF_INET6) {
-        struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)&ss;
-        inet_ntop(AF_INET6, &sin6->sin6_addr, client->ip_str,
-                  sizeof(client->ip_str));
-        client->port = (int)ntohs(sin6->sin6_port);
-    } else {
-        snprintf(client->ip_str, sizeof(client->ip_str), "unknown");
-        client->port = 0;
-    }
-
-    return client;
 }
 
 int run_event_loop(const int server_fd)

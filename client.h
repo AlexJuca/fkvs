@@ -1,8 +1,11 @@
 #ifndef CLIENT_H
 #define CLIENT_H
 
+#include <arpa/inet.h>
 #include <netinet/in.h>
 #include <stdbool.h>
+#include <sys/socket.h>
+#include <unistd.h>
 
 typedef struct client_t {
 #define BUFFER_SIZE 655365
@@ -16,5 +19,7 @@ typedef struct client_t {
     int port;
     bool verbose; // print additional information
 } client_t;
+
+client_t *init_client(const int client_fd, struct sockaddr_storage ss);
 
 #endif // CLIENT_H

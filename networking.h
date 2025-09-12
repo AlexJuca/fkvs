@@ -7,6 +7,8 @@
 
 int start_server(server_t *server);
 void try_process_frames(client_t *c);
+void set_tcp_no_delay(const int fd);
+void set_nonblocking(const int fd);
 #endif
 
 #ifdef CLI
