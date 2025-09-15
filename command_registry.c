@@ -53,7 +53,7 @@ void send_reply(const int client_fd, const unsigned char *buffer,
     const size_t core_cmd_len = bytes_read + 3;
     const size_t full_frame_length = core_cmd_len + 2;
 
-    unsigned char *reply = malloc(core_cmd_len);
+    unsigned char *reply = malloc(full_frame_length);
 
     reply[0] = (core_cmd_len >> 8) & 0xFF;
     reply[1] = core_cmd_len & 0xFF;

@@ -24,6 +24,19 @@ static void warn(const char *ctx, const char *file, int line)
     perror(ctx);
 }
 
+static void print_binary_data(const unsigned char *data, const size_t len)
+{
+    for (size_t j = 0; j < len; j++) {
+        const unsigned char c = data[j];
+        if (c >= 32 && c <= 126) {
+            putchar(c); // printable ASCII
+        } else {
+            printf("\\x%02x", c); // escape non-printable
+        }
+    }
+    putchar('\n');
+}
+
 #ifdef SERVER
 
 // TODO: When process is running as a daemon, ensure we don't print to standard
@@ -43,19 +56,6 @@ static void log_std_out(char *ctx)
 static void _log(char *ctx)
 {
     server.daemonize ? append_to_log_file(ctx) : log_std_out(ctx);
-}
-
-static void print_binary_data(const unsigned char *data, const size_t len)
-{
-    for (size_t j = 0; j < len; j++) {
-        const unsigned char c = data[j];
-        if (c >= 32 && c <= 126) {
-            putchar(c); // printable ASCII
-        } else {
-            printf("\\x%02x", c); // escape non-printable
-        }
-    }
-    putchar('\n');
 }
 
 static bool is_integer(const unsigned char *str, const size_t len)

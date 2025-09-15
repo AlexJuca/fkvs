@@ -104,7 +104,7 @@ void handle_set_command(int client_fd, unsigned char *buffer, size_t bytes_read)
 
     set_value(table, &buffer[pos_key], key_len, &buffer[pos_value], value_len);
 
-    send_reply(client_fd, buffer, value_len);
+    send_reply(client_fd, &buffer[pos_value], value_len);
     free(data);
 }
 

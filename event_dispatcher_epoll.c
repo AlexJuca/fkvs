@@ -1,7 +1,6 @@
 #if defined(__linux__)
 
 #include "client.h"
-#include "command_registry.h"
 #include "event_dispatcher.h"
 #include "list.h"
 #include "networking.h"
