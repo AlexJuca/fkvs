@@ -69,7 +69,7 @@ void try_process_frames(client_t *c)
 {
     // Parse as many complete frames as possible.
     if (server.verbose) {
-        printf("Attempting to process frames");
+        printf("Attempting to process frame \n");
     }
     for (;;) {
         if (c->buf_used < 2)

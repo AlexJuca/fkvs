@@ -1,13 +1,11 @@
 #ifdef __APPLE__
 
 #include "client.h"
-#include "command_registry.h"
 #include "event_dispatcher.h"
 #include "list.h"
 #include "networking.h"
 #include "server.h"
 #include "utils.h"
-#include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <netinet/in.h>
