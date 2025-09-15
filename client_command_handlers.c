@@ -111,7 +111,7 @@ void cmd_ping(const command_args_t args, void (*response_cb)(client_t *client))
 {
     if (!strcasecmp(args.cmd, "PING")) {
         size_t cmd_len;
-        char *value = NULL;
+        const char *value = NULL;
         // TODO: I'm not happy with this solution, refactor this in future and
         // handle edge cases, when value has a space
         // in the middle, e.g, PING "hello world"
@@ -155,9 +155,9 @@ void cmd_ping(const command_args_t args, void (*response_cb)(client_t *client))
 void cmd_unknown(const command_args_t args,
                  void (*response_cb)(client_t *client))
 {
-    if (strcasecmp(args.cmd, "INCR") &&
-        strcasecmp(args.cmd, "INCRBY") & strcasecmp(args.cmd, "GET") &
-            strcasecmp(args.cmd, "SET") & strcasecmp(args.cmd, "PING")) {
+    if (strcasecmp(args.cmd, "INCR") && strcasecmp(args.cmd, "INCRBY") &&
+        strcasecmp(args.cmd, "GET") && strcasecmp(args.cmd, "SET") &&
+        strcasecmp(args.cmd, "PING")) {
         printf("Unknown command \n");
     }
 }
