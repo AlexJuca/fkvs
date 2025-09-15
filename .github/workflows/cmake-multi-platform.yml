@@ -1,0 +1,81 @@
+name: CMake on macOS & Ubuntu
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        build_type: [Release]
+        c_compiler: [gcc, clang]
+        include:
+          # Ubuntu combos
+          - os: ubuntu-latest
+            c_compiler: gcc
+            cpp_compiler: g++
+          - os: ubuntu-latest
+            c_compiler: clang
+            cpp_compiler: clang++
+          # macOS uses Apple Clang
+          - os: macos-latest
+            c_compiler: clang
+            cpp_compiler: clang++
+        exclude:
+          # Prevent gcc on macOS (Apple Clang presents as gcc but we want explicit clang)
+          - os: macos-latest
+            c_compiler: gcc
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Ensure toolchain availability per-OS
+      - name: Install toolchain (Ubuntu/clang only)
+        if: matrix.os == 'ubuntu-latest' && matrix.c_compiler == 'clang'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang
+
+      - name: Ensure CMake on macOS
+        if: matrix.os == 'macos-latest'
+        run: |
+          if ! command -v cmake >/dev/null 2>&1; then
+            brew update
+            brew install cmake
+          fi
+
+      - name: Show tool versions
+        run: |
+          echo "CMake: $(cmake --version | head -n1)"
+          echo "CC: ${{ matrix.c_compiler }} -> $(which ${{ matrix.c_compiler }})"
+          echo "CXX: ${{ matrix.cpp_compiler }} -> $(which ${{ matrix.cpp_compiler }})"
+          ${{ matrix.c_compiler }} --version
+          ${{ matrix.cpp_compiler }} --version
+
+      - name: Set reusable strings
+        id: strings
+        shell: bash
+        run: |
+          echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
+
+      - name: Configure CMake
+        run: >
+          cmake -B ${{ steps.strings.outputs.build-output-dir }}
+          -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
+          -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+          -S ${{ github.workspace }}
+
+      - name: Build
+        run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
+
+      - name: Test
+        working-directory: ${{ steps.strings.outputs.build-output-dir }}
+        run: ctest --build-config ${{ matrix.build_type }}
