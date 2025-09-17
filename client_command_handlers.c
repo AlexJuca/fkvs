@@ -223,7 +223,7 @@ void command_response_handler(client_t *client)
             }
         } else {
             if (!client->benchmark_mode) {
-                // printf("(nil) \n");
+                printf("(nil) \n");
             }
         }
     }
