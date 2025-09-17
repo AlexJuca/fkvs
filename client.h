@@ -17,6 +17,7 @@ typedef struct client_t {
     char ip_str[INET6_ADDRSTRLEN]; // TODO: Remove this in the future
     char *ip_address;
     int port;
+    bool benchmark_mode;
     bool verbose; // print additional information
 } client_t;
 

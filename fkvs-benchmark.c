@@ -55,7 +55,8 @@ static void print_usage_and_exit(const char *prog)
             "  -h HOST  server host/IP (default 127.0.0.1)\n"
             "  -p PORT  server port (default 5995)\n"
             "  -k       keep-alive (default on)\n"
-            "  -t       type of command to use during benchmark (ping, get, set, default ping) \n",
+            "  -t       type of command to use during benchmark (ping, get, "
+            "set, default ping) \n",
             prog);
     exit(1);
 }
@@ -108,6 +109,7 @@ static void *worker(void *arg)
     client_t client = {0};
     client.ip_address = (char *)w->cfg->ip;
     client.port = w->cfg->port;
+    client.benchmark_mode = true;
     client.verbose = w->cfg->verbose;
 
     int fd = start_client(&client);
@@ -129,9 +131,11 @@ static void *worker(void *arg)
             ko++;
             continue;
         }
-        execute_command(w->cfg->command_type, &client, command_response_handler);
+        execute_command(w->cfg->command_type, &client,
+                        command_response_handler);
         ok++;
-        // TODO: Handle failures correctly. We currently don't track failures (ko's).
+        // TODO: Handle failures correctly. We currently don't track failures
+        // (ko's).
     }
 
     w->completed = ok;
@@ -150,7 +154,8 @@ int main(const int argc, char **argv)
                               .verbose = false};
 
     for (int i = 1; i < argc; ++i) {
-        if (strcasecmp(argv[i], "--h") == 0 || strcasecmp(argv[i], "--help") == 0) {
+        if (strcasecmp(argv[i], "--h") == 0 ||
+            strcasecmp(argv[i], "--help") == 0) {
             print_usage_and_exit(argv[0]);
         } else if (strcmp(argv[i], "-n") == 0 && i + 1 < argc) {
             cfg.requests = strtoull(argv[++i], NULL, 10);
@@ -163,9 +168,9 @@ int main(const int argc, char **argv)
         } else if (strcmp(argv[i], "-k") == 0) {
             cfg.keep_alive = true;
         } else if (strcmp(argv[i], "-t") == 0 && i + 1 < argc) {
-          if (strcmp(argv[++i], "ping") == 0) {
-            cfg.command_type = "PING";
-          }
+            if (strcmp(argv[++i], "ping") == 0) {
+                cfg.command_type = "PING";
+            }
         }
     }
 
