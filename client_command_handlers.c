@@ -192,11 +192,11 @@ void command_response_handler(client_t *client)
                         0) { // if the length of the value relayed
                         // back to client is 0, we assume no PING received no
                         // arguments
-                        printf("PONG\n");
+                        // printf("PONG\n");
                     } else {
                         char *data = malloc(value_len + 1);
                         memcpy(data, &client->buffer[5], value_len);
-                        printf("\"%s\" \n", data);
+                        // printf("\"%s\" \n", data);
                         free(data);
                     }
                 } else {
@@ -205,7 +205,7 @@ void command_response_handler(client_t *client)
                     char *data = malloc(value_len + 1);
                     memcpy(data, &client->buffer[5], value_len);
                     if (strlen(data) == 0) {
-                        printf("OK\n");
+                        // printf("OK\n");
                     } else {
                         printf("\"%s\" \n", data);
                     }
@@ -214,7 +214,7 @@ void command_response_handler(client_t *client)
                 }
             }
         } else {
-            printf("(nil) \n");
+            // printf("(nil) \n");
         }
     }
 }

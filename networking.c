@@ -9,7 +9,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#define BACKLOG 4096 // Number of allowed connections
+#define BACKLOG 1000000 // Number of allowed connections
 
 #ifdef SERVER
 

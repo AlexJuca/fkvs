@@ -4,6 +4,7 @@ CmakeCache.txt
 cmake_install.cmake
 *fkvs-cli
 *fkvs-server
+*fkvs-benchmark
 *fkvs
 .idea
 build.log
