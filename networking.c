@@ -9,7 +9,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#define BACKLOG 4096 // Number of allowed connections
+#define BACKLOG 2000000 // Number of allowed connections
 
 #ifdef SERVER
 
@@ -143,7 +143,9 @@ int start_client(client_t *client)
         return -1;
     }
 
-    printf("Connected to server on port %d\n", client->port);
+    if (client->verbose) {
+        printf("Connected to server on port %d\n", client->port);
+    }
     return client_fd;
 }
 #endif

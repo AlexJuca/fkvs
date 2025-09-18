@@ -192,11 +192,15 @@ void command_response_handler(client_t *client)
                         0) { // if the length of the value relayed
                         // back to client is 0, we assume no PING received no
                         // arguments
-                        printf("PONG\n");
+                        if (!client->benchmark_mode) {
+                            printf("PONG\n");
+                        }
                     } else {
                         char *data = malloc(value_len + 1);
                         memcpy(data, &client->buffer[5], value_len);
-                        printf("\"%s\" \n", data);
+                        if (!client->benchmark_mode) {
+                            printf("\"%s\" \n", data);
+                        }
                         free(data);
                     }
                 } else {
@@ -205,16 +209,22 @@ void command_response_handler(client_t *client)
                     char *data = malloc(value_len + 1);
                     memcpy(data, &client->buffer[5], value_len);
                     if (strlen(data) == 0) {
-                        printf("OK\n");
+                        if (!client->benchmark_mode) {
+                            printf("OK\n");
+                        }
                     } else {
-                        printf("\"%s\" \n", data);
+                        if (!client->benchmark_mode) {
+                            printf("\"%s\" \n", data);
+                        }
                     }
 
                     free(data);
                 }
             }
         } else {
-            printf("(nil) \n");
+            if (!client->benchmark_mode) {
+                printf("(nil) \n");
+            }
         }
     }
 }

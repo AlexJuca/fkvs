@@ -92,6 +92,7 @@ client_t loadClientConfig(const char *path)
     client.port = 5995;
     client.ip_address = "127.0.0.1";
     client.verbose = false;
+    client.benchmark_mode = false;
 
     char line[1024];
 
