@@ -61,8 +61,20 @@ static void print_usage_and_exit(const char *prog)
     exit(1);
 }
 
+// We use CLOCK_MONOTONIC_RAW time, because it is
+// unaffected by NTP adjustments and
+// is hardware based. By hardware, I mean
+// the OS initially reads from the CPU tsc (time stamp counter),
+// and the OS ensures time increases monotonically from that point.
+// This allows us to read time precisely, which is
+// exactly what we need for benchmarking
+// utilities like this.
 static double monotonic_seconds(void)
 {
+    // We use mach_absolute_time time on macOS only because, older versions of
+    // macOS, e.g, macOS Sierra did not have CLOCK_MONOTONIC_RAW.
+    // We could remove this in future if we don't
+    // intend to support macOS Sierra and older.
 #ifdef __APPLE__
     static mach_timebase_info_data_t tb;
     if (!tb.denom)
@@ -135,7 +147,7 @@ static void *worker(void *arg)
                         command_response_handler);
         ok++;
         // TODO: Handle failures correctly. We currently don't track failures
-        // (ko's).
+        // (ko's) from failing requests.
     }
 
     w->completed = ok;
@@ -216,7 +228,7 @@ int main(const int argc, char **argv)
     while (gate.ready < gate.need) {
         struct timespec abs;
         clock_gettime(CLOCK_REALTIME, &abs);
-        abs.tv_sec += 2; // 2s to gather
+        abs.tv_sec += 5; // We wait 5 seconds to gather
         const int rc = pthread_cond_timedwait(&gate.cv, &gate.mu, &abs);
         if (rc == ETIMEDOUT) {
             fprintf(stderr, "%d/%d workers ready.\n", gate.ready, gate.need);
