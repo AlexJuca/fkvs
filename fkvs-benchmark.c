@@ -61,14 +61,16 @@ static void print_usage_and_exit(const char *prog)
     exit(1);
 }
 
-// We use CLOCK_MONOTONIC_RAW time, because it is
-// unaffected by NTP adjustments and
-// is hardware based. By hardware, I mean
-// the OS initially reads from the CPU tsc (time stamp counter),
-// and the OS ensures time increases monotonically from that point.
-// This allows us to read time precisely, which is
-// exactly what we need for benchmarking
-// utilities like this.
+// We use CLOCK_MONOTONIC_RAW for micro-benchmarking because it is
+// unaffected by NTP adjustments and other time corrections.
+// It provides a raw hardware-based monotonic clock source.
+// This typically comes from a CPU’s TSC (time stamp counter)
+// on x86 and the System Counter(CNTVCT_EL0) on M1+ processors
+// or another stable hardware counter chosen by the kernel.
+// Unlike CLOCK_MONOTONIC, it is not smoothed or adjusted by the OS.
+// This makes it ideal for precise interval measurements,
+// such as micro-benchmarking, where absolute wall-clock time is irrelevant
+// and only raw monotonically increasing time matters.
 static double monotonic_seconds(void)
 {
     // We use mach_absolute_time time on macOS only because, older versions of
