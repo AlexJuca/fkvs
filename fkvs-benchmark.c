@@ -184,6 +184,9 @@ int main(const int argc, char **argv)
         } else if (strcmp(argv[i], "-p") == 0 && i + 1 < argc) {
             cfg.port = atoi(argv[++i]);
         } else if (strcmp(argv[i], "-k") == 0) {
+            // TODO: Currently, client always keeps the connection alive, in the future
+            // we want to ensure this value passes down to a client to ensure
+           // connection is handled based on this value.
             cfg.keep_alive = true;
         } else if (strcmp(argv[i], "-t") == 0 && i + 1 < argc) {
             if (strcmp(argv[++i], "ping") == 0) {
