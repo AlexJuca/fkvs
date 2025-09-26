@@ -85,7 +85,7 @@ void handle_set_command(int client_fd, unsigned char *buffer, size_t bytes_read)
     const size_t pos_value = after_key + 2; // start of value bytes
     const size_t end_value = pos_value + value_len;
 
-    // Check that the whole value fits inside the *advertised* core and the
+    // Check that the whole value fits inside the core and the
     // received buffer
     const size_t core_payload_size = (size_t)1 + 2 + key_len + 2 + value_len;
     if (core_payload_size > core_len || (end_value + 0) > bytes_read) {

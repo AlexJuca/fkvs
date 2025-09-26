@@ -4,6 +4,6 @@
 #define MAX_EVENTS 100000
 
 // Defines the interface for platform-specific event loops
-int run_event_loop(int server_fd);
+int run_event_loop();
 
 #endif // EVENT_DISPATCHER_H

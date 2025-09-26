@@ -6,12 +6,12 @@
 
 #ifdef SERVER
 #include "server.h"
-server_t loadServerConfig(const char *path);
+server_t load_server_config(const char *path);
 #endif
 
 #ifdef CLI
 #include "client.h"
-client_t loadClientConfig(const char *path);
+client_t load_client_config(const char *path);
 #endif
 
 #endif // CONFIG_H

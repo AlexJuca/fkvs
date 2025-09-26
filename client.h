@@ -1,8 +1,9 @@
 #ifndef CLIENT_H
 #define CLIENT_H
 
+#include "modes.h"
+
 #include <arpa/inet.h>
-#include <netinet/in.h>
 #include <stdbool.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -17,10 +18,14 @@ typedef struct client_t {
     char ip_str[INET6_ADDRSTRLEN]; // TODO: Remove this in the future
     char *ip_address;
     int port;
+    char *uds_socket_path; // Unix domain socket path
+    enum SocketType socket_type;
     bool benchmark_mode;
     bool verbose; // print additional information
+#define N_KEYS 100000
 } client_t;
 
-client_t *init_client(const int client_fd, struct sockaddr_storage ss);
+client_t *init_client(const int client_fd, struct sockaddr_storage ss,
+                      enum SocketType socket_type);
 
 #endif // CLIENT_H

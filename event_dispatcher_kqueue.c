@@ -38,20 +38,16 @@ static void close_and_drop_client(const int kq, client_t *c)
     if (node) {
         listDeleteNode(server.clients, node);
         free(node->val); // free(client_t)
-        server.numClients -= 1;
+        server.num_clients -= 1;
     }
 
     close(c->fd);
     free(c);
 }
 
-int run_event_loop(const int server_fd)
+int run_event_loop()
 {
-    if (server.verbose) {
-        printf("Connected clients: %d\n", (int)server.numClients);
-    }
-
-    set_nonblocking(server_fd);
+    set_nonblocking(server.fd);
 
     const int kq = kqueue();
     if (kq == -1) {
@@ -60,7 +56,7 @@ int run_event_loop(const int server_fd)
     }
 
     struct kevent ch;
-    EV_SET(&ch, server_fd, EVFILT_READ, EV_ADD | EV_ENABLE | EV_CLEAR, 0, 0,
+    EV_SET(&ch, server.fd, EVFILT_READ, EV_ADD | EV_ENABLE | EV_CLEAR, 0, 0,
            NULL);
     if (kevent(kq, &ch, 1, NULL, 0, NULL) == -1) {
         perror("kevent register (server)");
@@ -84,31 +80,33 @@ int run_event_loop(const int server_fd)
             const int ident_fd = (int)evs[i].ident;
 
             // New connection on the server listening socket.
-            if (ident_fd == server_fd) {
+            if (ident_fd == server.fd) {
                 for (;;) {
                     struct sockaddr_storage ss;
                     socklen_t slen = sizeof(ss);
                     const int cfd =
-                        accept(server_fd, (struct sockaddr *)&ss, &slen);
+                        accept(server.fd, (struct sockaddr *)&ss, &slen);
                     if (cfd < 0) {
                         if (errno == EAGAIN || errno == EWOULDBLOCK)
                             break;
                         perror("accept");
                         break;
                     }
-
                     set_nonblocking(cfd);
-                    set_tcp_no_delay(cfd);
 
-                    client_t *c = init_client(cfd, ss);
+                    if (server.socket_type == TCP_IP) {
+                        set_tcp_no_delay(cfd);
+                    }
+
+                    client_t *c = init_client(cfd, ss, server.socket_type);
 
                     server.clients = listAddNodeToTail(server.clients, c);
-                    server.numClients += 1;
+                    server.num_clients += 1;
 
                     if (server.verbose) {
                         printf("Client connected fd=%d %s:%d (total=%d)\n",
                                c->fd, c->ip_str, c->port,
-                               (int)server.numClients);
+                               (int)server.num_clients);
                     }
 
                     // Register the client fd with kqueue and stash client* in
