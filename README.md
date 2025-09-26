@@ -1,5 +1,3 @@
-## ⚡ FKVS
-
 ```shell
 
            _         _      _          _      _        
@@ -16,7 +14,7 @@
   
 ```
 
-FKVS (Fast Key Value Store) is a tiny, **high‑performance** key‑value store written in C (with no dependencies) 
+⚡ FKVS (Fast Key Value Store) is a tiny, **high‑performance** key‑value store written in C (with no dependencies) 
 with a single‑threaded, non‑blocking I/O multiplexed event loop.
 
 It is part of my experiment to understand what it takes to build a key value store similar to redis in C from first
@@ -30,9 +28,9 @@ docker build -t fkvs:latest -f Dockerfile .
 docker run --rm -it -p 5995:5995 fkvs:latest
 ```
 
-## Build Fkvs from source
+## Build fkvs from source
 
-### Build and run Fkvs on Ubuntu 20+
+### Build and run fkvs on Ubuntu 20+
 
 ```shell
 apt remove --purge --auto-remove cmake
@@ -52,7 +50,7 @@ cmake --build .
 ./fkvs-server -c
 ```
 
-### Build and run Fkvs on macOS 13 +
+### Build and run fkvs on macOS 13 +
 
 ```shell
 brew install cmake
