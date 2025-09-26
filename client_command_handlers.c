@@ -2,6 +2,7 @@
 #include "client.h"
 #include "command_defs.h"
 #include "command_parser.h"
+#include "keygen.h"
 #include "utils.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -173,6 +174,44 @@ void execute_command(const char *cmd, client_t *client,
     const command_args_t args = {.cmd = cmd, .client = client};
     for (int i = 0; i < ARRAY_SIZE(command_table); i++) {
         command_table[i].cmd_fn(args, response_cb);
+    }
+}
+
+void execute_command_benchmark(const char *cmd, client_t *client,
+                               bool use_pregenerated_keys,
+                               void (*response_cb)(client_t *client))
+{
+    const command_args_t args = {.cmd = cmd, .client = client};
+
+    size_t cmd_len;
+    if (!strcasecmp(cmd, "set")) {
+
+        unsigned char *binary_cmd;
+
+        if (use_pregenerated_keys) {
+            /**
+             * This benchmarks the write path, using different keys on every
+             * command execution. In the future, we might want to pregen keys
+             * and use them here so we don't spend too much of our benchmarking
+             * time generating and formatting uuid keys as strings
+             */
+            char key[32];
+            generate_unique_key(key);
+
+            binary_cmd = construct_set_command(key, "world", &cmd_len);
+        } else {
+            binary_cmd = construct_set_command("hello", "world", &cmd_len);
+        }
+
+        send(args.client->fd, binary_cmd, cmd_len, 0);
+        free(binary_cmd);
+        response_cb(args.client);
+    } else if (!strcasecmp(cmd, "ping")) {
+        unsigned char *binary_cmd = construct_ping_command("", &cmd_len);
+
+        send(args.client->fd, binary_cmd, cmd_len, 0);
+        free(binary_cmd);
+        response_cb(args.client);
     }
 }
 

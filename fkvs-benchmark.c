@@ -26,6 +26,8 @@ typedef struct {
     int port;
     bool verbose;
     char *command_type;
+    enum SocketType socket_type;
+    bool use_random_keys;
 } benchmark_config_t;
 
 typedef struct {
@@ -55,8 +57,11 @@ static void print_usage_and_exit(const char *prog)
             "  -h HOST  server host/IP (default 127.0.0.1)\n"
             "  -p PORT  server port (default 5995)\n"
             "  -k       keep-alive (default on)\n"
-            "  -t       type of command to use during benchmark (ping, get, "
-            "set, default ping) \n",
+            "  -u       connect via unix domain socket \n"
+            "  -t       type of command to use during benchmark (ping, "
+            "set, default ping) \n"
+            "  -r       use random pregenerated keys for insertion commands, "
+            "default is 10 000 random keys  \n",
             prog);
     exit(1);
 }
@@ -123,16 +128,29 @@ typedef struct {
 static void *worker(void *arg)
 {
     worker_args_t *w = arg;
-
     client_t client = {0};
+
+    if (w->cfg->socket_type == UNIX) {
+        client.socket_type = w->cfg->socket_type;
+        client.uds_socket_path = FKVS_SOCK_PATH;
+    }
     client.ip_address = (char *)w->cfg->ip;
     client.port = w->cfg->port;
     client.benchmark_mode = true;
     client.verbose = w->cfg->verbose;
 
-    int fd = start_client(&client);
+    int fd;
+
+    if (client.socket_type == UNIX) {
+        fd = start_uds_client(&client);
+    } else {
+        fd = start_client(&client);
+    }
+
     if (fd != -1) {
-        tune_socket(fd);
+        if (client.socket_type == TCP_IP) {
+            tune_socket(fd);
+        }
     }
 
     // arrive at the start gate
@@ -149,8 +167,10 @@ static void *worker(void *arg)
             ko++;
             continue;
         }
-        execute_command(w->cfg->command_type, &client,
-                        command_response_handler);
+
+        execute_command_benchmark(w->cfg->command_type, &client,
+                                  w->cfg->use_random_keys,
+                                  command_response_handler);
         ok++;
         // TODO: Handle failures correctly. We currently don't track failures
         // (ko's) from failing requests.
@@ -169,6 +189,7 @@ int main(const int argc, char **argv)
                               .ip = "127.0.0.1",
                               .port = 5995,
                               .command_type = "PING",
+                              .use_random_keys = false,
                               .verbose = false};
 
     for (int i = 1; i < argc; ++i) {
@@ -183,15 +204,24 @@ int main(const int argc, char **argv)
             cfg.ip = argv[++i];
         } else if (strcmp(argv[i], "-p") == 0 && i + 1 < argc) {
             cfg.port = atoi(argv[++i]);
+        } else if (strcmp(argv[i], "-u") == 0) {
+            cfg.socket_type = UNIX;
         } else if (strcmp(argv[i], "-k") == 0) {
-            // TODO: Currently, client always keeps the connection alive, in the future
-            // we want to ensure this value passes down to a client to ensure
-           // connection is handled based on this value.
+            // TODO: Currently, client always keeps the connection alive, in the
+            // future we want to ensure this value passes down to a client to
+            // ensure
+            // connection is handled based on this value.
             cfg.keep_alive = true;
         } else if (strcmp(argv[i], "-t") == 0 && i + 1 < argc) {
-            if (strcmp(argv[++i], "ping") == 0) {
+            if (strcmp(argv[i + 1], "ping") == 0) {
                 cfg.command_type = "PING";
             }
+
+            if (strcmp(argv[i + 1], "set") == 0) {
+                cfg.command_type = "SET";
+            }
+        } else if (strcmp(argv[i], "-r") == 0) {
+            cfg.use_random_keys = true;
         }
     }
 

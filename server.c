@@ -20,7 +20,6 @@
 /* Global Server instance */
 server_t server;
 
-int SERVER_FD = -1;
 int EPOLL_KQQUEUE_FD = -1;
 
 void show_logo()
@@ -95,10 +94,16 @@ void handle_sigint(int sig)
     }
 
     listEmpty(server.clients);
-    server.numClients = 0;
+    server.num_clients = 0;
 
     // Cleanup server
-    close(SERVER_FD);
+    if (server.socket_type == UNIX) {
+        if (server.verbose) {
+            LOG_INFO("failed to unlink socket path");
+        }
+    }
+
+    close(server.fd);
     close(EPOLL_KQQUEUE_FD);
     exit(EXIT_SUCCESS);
 }
@@ -112,10 +117,6 @@ int main(int argc, char *argv[])
 {
     char *config_path = DEFAULT_SERVER_CONFIG_FILE_PATH;
 
-    server.pid = getpid();
-
-    time_t ct;
-
     if (argc < 2) {
         print_usage_and_exit();
     }
@@ -126,7 +127,8 @@ int main(int argc, char *argv[])
         }
     }
 
-    server = loadServerConfig(config_path);
+    server = load_server_config(config_path);
+    server.pid = getpid();
 
     for (int i = 0; i < argc; i++) {
         if (strcmp("-h", argv[i]) == 0 || strcmp("--help", argv[i]) == 0) {
@@ -151,21 +153,29 @@ int main(int argc, char *argv[])
         daemonize();
     } else {
 
-        if (server.showLogo && !server.daemonize) {
+        if (server.show_logo && !server.daemonize) {
             show_logo();
         }
 
         LOG_INFO("Server starting");
-        if (server.verbose) {
-            LOG_INFO("Current process id: ");
-        }
     }
 
     setup_client_list();
     signal(SIGINT, handle_sigint);
 
-    SERVER_FD = start_server(&server);
-    if (SERVER_FD == -1) {
+    if (server.socket_type == UNIX) {
+        if (unlink(FKVS_SOCK_PATH) == -1) {
+            if (server.verbose) {
+                LOG_INFO("failed to unlink socket path");
+            }
+        }
+
+        start_uds_server();
+    } else {
+        start_server();
+    }
+
+    if (server.fd == -1) {
         fprintf(stderr, "Failed to start the server. Exiting.\n");
         exit(EXIT_FAILURE);
     }
@@ -174,7 +184,7 @@ int main(int argc, char *argv[])
 
     init_command_handlers(ht);
 
-    EPOLL_KQQUEUE_FD = run_event_loop(SERVER_FD);
+    EPOLL_KQQUEUE_FD = run_event_loop();
 
     return 0;
 }

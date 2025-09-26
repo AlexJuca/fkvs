@@ -1,4 +1,6 @@
-#if defined(__linux__)
+#ifdef __linux__
+#include "client.h"
+#include "modes.h"
 
 #include "client.h"
 #include "event_dispatcher.h"
@@ -38,20 +40,17 @@ static void close_and_drop_client(const int epfd, client_t *c)
     if (node) {
         listDeleteNode(server.clients, node);
         free(node->val); // free(client_t) allocated for list storage if any
-        server.numClients -= 1;
+        server.num_clients -= 1;
     }
 
     close(c->fd);
     free(c);
 }
 
-int run_event_loop(const int server_fd)
+int run_event_loop()
 {
-    if (server.verbose) {
-        printf("Connected clients: %d\n", (int)server.numClients);
-    }
 
-    set_nonblocking(server_fd);
+    set_nonblocking(server.fd);
 
     const int epfd = epoll_create1(0);
     if (epfd == -1) {
@@ -62,8 +61,8 @@ int run_event_loop(const int server_fd)
     struct epoll_event ev;
     memset(&ev, 0, sizeof(ev));
     ev.events = EPOLLIN | EPOLLET; // edge-triggered like EV_CLEAR
-    ev.data.fd = server_fd;
-    if (epoll_ctl(epfd, EPOLL_CTL_ADD, server_fd, &ev) == -1) {
+    ev.data.fd = server.fd;
+    if (epoll_ctl(epfd, EPOLL_CTL_ADD, server.fd, &ev) == -1) {
         perror("epoll_ctl (server)");
         close(epfd);
         return -1;
@@ -84,12 +83,12 @@ int run_event_loop(const int server_fd)
             const uint32_t evt = events[i].events;
 
             // New connections on the listening socket
-            if (events[i].data.fd == server_fd) {
+            if (events[i].data.fd == server.fd) {
                 for (;;) {
                     struct sockaddr_storage ss;
                     socklen_t slen = sizeof(ss);
                     const int cfd =
-                        accept(server_fd, (struct sockaddr *)&ss, &slen);
+                        accept(server.fd, (struct sockaddr *)&ss, &slen);
                     if (cfd < 0) {
                         if (errno == EAGAIN || errno == EWOULDBLOCK)
                             break;
@@ -98,21 +97,23 @@ int run_event_loop(const int server_fd)
                     }
 
                     set_nonblocking(cfd);
-                    set_tcp_no_delay(cfd);
+                    if (server.socket_type == TCP_IP) {
+                        set_tcp_no_delay(cfd);
+                    }
 
-                    client_t *c = init_client(cfd, ss);
+                    client_t *c = init_client(cfd, ss, server.socket_type);
                     if (!c) {
                         // already closed by init_client on failure
                         continue;
                     }
 
                     server.clients = listAddNodeToTail(server.clients, c);
-                    server.numClients += 1;
+                    server.num_clients += 1;
 
                     if (server.verbose) {
                         printf("Client connected fd=%d %s:%d (total=%d)\n",
                                c->fd, c->ip_str, c->port,
-                               (int)server.numClients);
+                               (int)server.num_clients);
                     }
 
                     struct epoll_event cev;

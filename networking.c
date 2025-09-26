@@ -6,6 +6,7 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <stdio.h>
+#include <sys/un.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -15,7 +16,7 @@
 
 #include "command_registry.h"
 
-int start_server(server_t *server)
+int start_server()
 {
     time_t ct;
     time(&ct);
@@ -27,12 +28,14 @@ int start_server(server_t *server)
         return -1;
     }
 
+    server.fd = server_fd;
+
     const int one = 1;
     setsockopt(server_fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
 
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = INADDR_ANY;
-    server_addr.sin_port = htons(server->port);
+    server_addr.sin_port = htons(server.port);
 
     if (bind(server_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) <
         0) {
@@ -48,6 +51,43 @@ int start_server(server_t *server)
     }
 
     LOG_INFO("Ready to accept connections via tcp");
+    return server_fd;
+}
+
+int start_uds_server()
+{
+    time_t ct;
+    time(&ct);
+    struct sockaddr_un server_addr;
+
+    int server_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (server_fd == -1) {
+        perror("socket failed");
+        return -1;
+    }
+
+    server.fd = server_fd;
+
+    memset(&server_addr, 0, sizeof(struct sockaddr_un));
+    server_addr.sun_family = AF_UNIX;
+    strncpy(server_addr.sun_path, FKVS_SOCK_PATH,
+            sizeof(server_addr.sun_path) - 1);
+    unlink(server.uds_socket_path);
+
+    if (bind(server_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) <
+        0) {
+        perror("bind failed");
+        close(server_fd);
+        return -1;
+    }
+
+    if (listen(server_fd, BACKLOG) < 0) {
+        perror("listen");
+        close(server_fd);
+        return -1;
+    }
+
+    LOG_INFO("Ready to accept connections via unix domain socket");
     return server_fd;
 }
 
@@ -145,6 +185,35 @@ int start_client(client_t *client)
 
     if (client->verbose) {
         printf("Connected to server on port %d\n", client->port);
+    }
+    return client_fd;
+}
+
+int start_uds_client(client_t *client)
+{
+    struct sockaddr_un server_addr;
+
+    int client_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (client_fd == -1) {
+        perror("socket failed");
+        return -1;
+    }
+
+    client->fd = client_fd;
+
+    memset(&server_addr, 0, sizeof(struct sockaddr_un));
+    server_addr.sun_family = AF_UNIX;
+    strncpy(server_addr.sun_path, client->uds_socket_path,
+            sizeof(server_addr.sun_path) - 1);
+
+    if (connect(client_fd, (struct sockaddr *)&server_addr,
+                sizeof(server_addr)) < 0) {
+        perror("Connection via unix domain socket failed");
+        return -1;
+    }
+
+    if (client->verbose) {
+        printf("Connected to server via unix domain socket \n");
     }
     return client_fd;
 }

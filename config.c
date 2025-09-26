@@ -1,12 +1,13 @@
 #include "config.h"
 #include "client.h"
+#include "networking.h"
 #include "utils.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #ifdef SERVER
-server_t loadServerConfig(const char *path)
+server_t load_server_config(const char *path)
 {
     FILE *config =
         fopen(path == NULL ? DEFAULT_SERVER_CONFIG_FILE_PATH : path, "r");
@@ -15,7 +16,9 @@ server_t loadServerConfig(const char *path)
         ERROR_AND_EXIT("Failed to open server config file: ");
     }
 
-    server.numClients = 0;
+    server.num_clients = 0;
+    server.uds_socket_path = NULL;
+    server.socket_type = TCP_IP;
 
     char line[1024];
 
@@ -32,11 +35,16 @@ server_t loadServerConfig(const char *path)
             server.port = atoi(value);
         }
 
+        if (strcmp(key, "unixsocket") == 0) {
+            server.uds_socket_path = value;
+            server.socket_type = UNIX;
+        }
+
         if (strcmp(key, "show-logo") == 0) {
             if (strcmp(value, "true") == 0) {
-                server.showLogo = true;
+                server.show_logo = true;
             } else if (strcmp(value, "false") == 0) {
-                server.showLogo = false;
+                server.show_logo = false;
             } else {
                 ERROR_AND_EXIT("'show-logo' expects a truthy value.");
             }
@@ -63,9 +71,9 @@ server_t loadServerConfig(const char *path)
 
             if (strcmp(key, "log-enabled") == 0) {
                 if (strcmp(value, "true") == 0) {
-                    server.isLogEnabled = true;
+                    server.is_logging_enabled = true;
                 } else if (strcmp(value, "false") == 0) {
-                    server.isLogEnabled = false;
+                    server.is_logging_enabled = false;
                 } else {
                     ERROR_AND_EXIT("'log-enabled' expects a truthy value.");
                 }
@@ -79,7 +87,7 @@ server_t loadServerConfig(const char *path)
 #endif
 
 #ifdef CLI
-client_t loadClientConfig(const char *path)
+client_t load_client_config(const char *path)
 {
     FILE *config =
         fopen(path == NULL ? DEFAULT_CLIENT_CONFIG_FILE_PATH : path, "r");
@@ -89,10 +97,10 @@ client_t loadClientConfig(const char *path)
     }
 
     client_t client;
-    client.port = 5995;
-    client.ip_address = "127.0.0.1";
     client.verbose = false;
     client.benchmark_mode = false;
+    client.uds_socket_path = NULL;
+    client.socket_type = TCP_IP;
 
     char line[1024];
 
@@ -115,6 +123,11 @@ client_t loadClientConfig(const char *path)
 
         if (strcmp(key, "verbose") == 0) {
             client.verbose = true;
+        }
+
+        if (strcmp(key, "unixsocket") == 0) {
+            client.uds_socket_path = value;
+            client.socket_type = UNIX;
         }
     }
 

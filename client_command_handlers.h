@@ -20,6 +20,10 @@ typedef struct {
 void execute_command(const char *cmd, client_t *client,
                      void (*response_cb)(client_t *client));
 
+void execute_command_benchmark(const char *cmd, client_t *client,
+                               bool use_pregenerated_keys,
+                               void (*response_cb)(client_t *client));
+
 void cmd_get(command_args_t args, void (*response_cb)(client_t *client));
 
 void cmd_set(command_args_t args, void (*response_cb)(client_t *client));

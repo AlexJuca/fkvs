@@ -12,7 +12,11 @@ void run_repl(client_t client)
 
     printf("Type 'exit' to quit.\n");
     while (1) {
-        printf("%s:%d> ", client.ip_address, client.port);
+        if (client.socket_type == TCP_IP) {
+            printf("%s:%d> ", client.ip_address, client.port);
+        } else {
+            printf("localhost> ");
+        }
         if (fgets(command, BUFFER_SIZE, stdin) == NULL) {
             break;
         }
@@ -33,9 +37,15 @@ void run_repl(client_t client)
 
 int main(int argc, char *argv[])
 {
-    client_t client = loadClientConfig(NULL);
+    client_t client = load_client_config(NULL);
+    int client_fd;
 
-    const int client_fd = start_client(&client);
+    if (client.socket_type == UNIX) {
+        client_fd = start_uds_client(&client);
+    } else {
+        client_fd = start_client(&client);
+    }
+
     if (client_fd == -1) {
         ERROR_AND_EXIT("Failed to connect to server");
         return 1;
