@@ -1,4 +1,4 @@
-## What is FKVS?
+## ⚡ FKVS
 
 ```shell
 
@@ -16,32 +16,13 @@
   
 ```
 
-FKVS (Fast Key Value Store) is a tiny, high‑performance key‑value store written in C (with no dependencies) with a single‑threaded, non‑blocking event loop.
+FKVS (Fast Key Value Store) is a tiny, **high‑performance** key‑value store written in C (with no dependencies) 
+with a single‑threaded, non‑blocking I/O multiplexed event loop.
 
-It is part of my experiment to understand what it takes to build a key value store similar to redis in C from first principles.
-I am not a C programmer by profession, so the code in this project is based on my limited understanding of the C language.
+It is part of my experiment to understand what it takes to build a key value store similar to redis in C from first
+principles.
 
-## High Level Design
-FKVS is composed of a server and client application.
-- The server listens for requests and processes commands from clients.
-- The client exposes a REPL where users can dispatch commands for the server to execute.
-
-The server uses a single-threaded event loop with I/O multiplexing for command execution using Kqueue on macOS and epoll 
-on Linux.
-
-The server and client communicate using a custom binary protocol called a frame.
-
-Frames ensure communication between the client and server is efficient and binary-safe.
-
-FKVS executes commands atomically. The server is a single-threaded, non-blocking event loop; it reads a full frame, 
-dispatches one handler, and completes it before handling the next. 
-
-This guarantees:
-- No interleaving of state mutations between commands from any clients.
-- Pipelined commands are processed in order.
-- Effects of a completed command are visible to subsequent commands.
-
-## Running inside docker
+## Running the fkvs server inside docker
 
 ```shell
 docker build -t fkvs:latest -f Dockerfile .  
@@ -127,13 +108,19 @@ Usage: fkvs-benchmark [-n total_requests] [-c clients] [-h host] [-p port]
           -r       use random pregenerated keys for insertion commands
 ```
 
-You need to have a running fkvs instance before launching the benchmark. A typical example would be:
+You need to have a running fkvs server instance before launching the benchmark. A typical example would be:
 
+Start the server:
+```shell
+./fkvs-server -c
+```
+
+Send N requests to the server.
 ```shell
 ./fkvs-benchmark -q -n 10000
 ```
 
-The output should be something like:
+The output:
 ```shell
 32/32 workers ready.
 Clients: 32  Total requests: 10000
@@ -142,12 +129,13 @@ Elapsed: 0.089054 s  Throughput: 112290.95 req/s
 ```
 
 You can stress cache misses and in general to simulate a more real-world work load by using a large key space. A random key 
-is generated for every request such that each request has a unique string as the key.
+is generated for every request such that each request for commands that write to the database, e.g, set, has
+a unique string as the key.
 
 ```shell
 ./fkvs-benchmark -r -n 1000000 -c 25 -t set
 ```
-The output should be something like:
+The output:
 ```shell
 25/25 workers ready.
 Clients: 25  Total requests: 1000000
@@ -155,8 +143,8 @@ Completed: 1000000  Failed: 0
 Elapsed: 13.417809 s  Throughput: 74527.82 req/s
 ```
 
-By default, the server and client communicate via TCP/IP on port 5995, but you can perform micro benchmarks locally using unix
-domain sockets.
+By default, the server and client communicate via TCP/IP on port 5995, but you can perform micro benchmarks 
+locally using unix domain sockets.
 
 Ensure the server is running in unix mode by updating the config to something like this:
 
@@ -169,7 +157,12 @@ show-logo true
 unixsocket /tmp/fkvs.sock
 ```
 
-and use the -u argument when invoking fkvs-benchmark:
+Start the server:
+```shell
+./fkvs-server -c
+```
+
+and use the `-u` argument when invoking fkvs-benchmark:
 
 ```shell
 ./fkvs-benchmark -u -n 1000000 -c 25 -t set
