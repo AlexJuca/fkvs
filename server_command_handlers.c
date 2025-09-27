@@ -165,7 +165,7 @@ void handle_incr_command(int client_fd, unsigned char *buffer,
         return;
     }
 
-    const char one_str[] = "1";
+    const char *one_str = "1";
     char *result_str = add_strings(old_str, one_str);
     if (!result_str) {
         send_error(client_fd);

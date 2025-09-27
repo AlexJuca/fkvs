@@ -56,7 +56,7 @@ void cmd_set(const command_args_t args, void (*response_cb)(client_t *client))
     }
 }
 
-void cmd_inc(const command_args_t args, void (*response_cb)(client_t *client))
+void cmd_incr(const command_args_t args, void (*response_cb)(client_t *client))
 {
     if (!strcasecmp(args.cmd, "INCR")) {
         const char *key = strtok(NULL, " ");
@@ -165,7 +165,7 @@ void cmd_unknown(const command_args_t args,
 
 const cmd_t command_table[] = {
     {"cmd_set", cmd_set},   {"cmd_get", cmd_get},
-    {"cmd_inc", cmd_inc},   {"cmd_incr_by", cmd_incr_by},
+    {"cmd_incr", cmd_incr}, {"cmd_incr_by", cmd_incr_by},
     {"cmd_ping", cmd_ping}, {"cmd_unknown", cmd_unknown}};
 
 void execute_command(const char *cmd, client_t *client,
