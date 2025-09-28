@@ -60,8 +60,7 @@ static void print_usage_and_exit(const char *prog)
             "  -u       connect via unix domain socket \n"
             "  -t       type of command to use during benchmark (ping, "
             "set, default ping) \n"
-            "  -r       use random pregenerated keys for insertion commands, "
-            "default is 10 000 random keys  \n",
+            "  -r       use random non-pregenerated keys for all insertion commands (set, setx, etc)",
             prog);
     exit(1);
 }
