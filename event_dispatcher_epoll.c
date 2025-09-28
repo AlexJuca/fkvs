@@ -97,11 +97,11 @@ int run_event_loop()
                     }
 
                     set_nonblocking(cfd);
-                    if (server.socket_type == TCP_IP) {
+                    if (server.socket_domain == TCP_IP) {
                         set_tcp_no_delay(cfd);
                     }
 
-                    client_t *c = init_client(cfd, ss, server.socket_type);
+                    client_t *c = init_client(cfd, ss, server.socket_domain);
                     if (!c) {
                         // already closed by init_client on failure
                         continue;

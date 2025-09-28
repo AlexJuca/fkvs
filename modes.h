@@ -1,2 +1,2 @@
 #pragma once
-enum SocketType { TCP_IP, UNIX };
+enum SocketDomain { TCP_IP, UNIX };

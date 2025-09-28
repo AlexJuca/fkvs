@@ -12,7 +12,7 @@ void run_repl(client_t client)
 
     printf("Type 'exit' to quit.\n");
     while (1) {
-        if (client.socket_type == TCP_IP) {
+        if (client.socket_domain == TCP_IP) {
             printf("%s:%d> ", client.ip_address, client.port);
         } else {
             printf("localhost> ");
@@ -40,7 +40,7 @@ int main(int argc, char *argv[])
     client_t client = load_client_config(NULL);
     int client_fd;
 
-    if (client.socket_type == UNIX) {
+    if (client.socket_domain == UNIX) {
         client_fd = start_uds_client(&client);
     } else {
         client_fd = start_client(&client);
