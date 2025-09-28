@@ -83,7 +83,7 @@ Type 'exit' to quit.
 - INCRBY key value
 
 
-### Benchmarking
+## Benchmarking
 
 For simple micro benchmarking, use the fkvs-benchmark CLI utility to test
 the server's throughput.
@@ -105,7 +105,7 @@ Usage: fkvs-benchmark [-n total_requests] [-c clients] [-h host] [-p port]
           -u       connect via unix domain socket
           -t       type of command to use during benchmark (ping,
           set, default ping)
-          -r       use random pregenerated keys for insertion commands
+          -r       use random non-pregenerated keys for all insertion commands (set, setx, etc)
 ```
 
 You need to have a running fkvs server instance before launching the benchmark. A typical example would be:
