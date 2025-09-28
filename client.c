@@ -5,7 +5,7 @@
 #include <sys/fcntl.h>
 
 client_t *init_client(const int client_fd, const struct sockaddr_storage ss,
-                      const enum SocketType socket_type)
+                      const enum SocketDomain socket_domain)
 {
     client_t *client = calloc(1, sizeof(*client));
     if (!client) {
@@ -20,8 +20,9 @@ client_t *init_client(const int client_fd, const struct sockaddr_storage ss,
     client->ip_str[0] = '\0';
     client->ip_address = client->ip_str; // keep alias consistent
     client->port = 0;
+    client->socket_domain = socket_domain;
 
-    if (socket_type == UNIX) {
+    if (client->socket_domain == UNIX) {
         client->uds_socket_path = FKVS_SOCK_PATH;
         snprintf(client->ip_str, sizeof(client->ip_str), "unix");
         return client;

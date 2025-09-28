@@ -97,7 +97,7 @@ void handle_sigint(int sig)
     server.num_clients = 0;
 
     // Cleanup server
-    if (server.socket_type == UNIX) {
+    if (server.socket_domain == UNIX) {
         if (server.verbose) {
             LOG_INFO("failed to unlink socket path");
         }
@@ -163,7 +163,7 @@ int main(int argc, char *argv[])
     setup_client_list();
     signal(SIGINT, handle_sigint);
 
-    if (server.socket_type == UNIX) {
+    if (server.socket_domain == UNIX) {
         if (unlink(FKVS_SOCK_PATH) == -1) {
             if (server.verbose) {
                 LOG_INFO("failed to unlink socket path");

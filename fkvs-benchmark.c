@@ -26,7 +26,7 @@ typedef struct {
     int port;
     bool verbose;
     char *command_type;
-    enum SocketType socket_type;
+    enum SocketDomain socket_domain;
     bool use_random_keys;
 } benchmark_config_t;
 
@@ -129,8 +129,8 @@ static void *worker(void *arg)
     worker_args_t *w = arg;
     client_t client = {0};
 
-    if (w->cfg->socket_type == UNIX) {
-        client.socket_type = w->cfg->socket_type;
+    if (w->cfg->socket_domain == UNIX) {
+        client.socket_domain = w->cfg->socket_domain;
         client.uds_socket_path = FKVS_SOCK_PATH;
     }
     client.ip_address = (char *)w->cfg->ip;
@@ -140,14 +140,14 @@ static void *worker(void *arg)
 
     int fd;
 
-    if (client.socket_type == UNIX) {
+    if (client.socket_domain == UNIX) {
         fd = start_uds_client(&client);
     } else {
         fd = start_client(&client);
     }
 
     if (fd != -1) {
-        if (client.socket_type == TCP_IP) {
+        if (client.socket_domain == TCP_IP) {
             tune_socket(fd);
         }
     }
@@ -204,7 +204,7 @@ int main(const int argc, char **argv)
         } else if (strcmp(argv[i], "-p") == 0 && i + 1 < argc) {
             cfg.port = atoi(argv[++i]);
         } else if (strcmp(argv[i], "-u") == 0) {
-            cfg.socket_type = UNIX;
+            cfg.socket_domain = UNIX;
         } else if (strcmp(argv[i], "-k") == 0) {
             // TODO: Currently, client always keeps the connection alive, in the
             // future we want to ensure this value passes down to a client to

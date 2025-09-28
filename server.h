@@ -17,7 +17,7 @@ typedef struct server_t {
     list_t *clients;
     u_int32_t num_clients;
     char *uds_socket_path; // Unix domain socket path
-    enum SocketType socket_type;
+    enum SocketDomain socket_domain;
 } server_t;
 
 #endif // SERVER_H

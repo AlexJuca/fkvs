@@ -18,7 +18,7 @@ server_t load_server_config(const char *path)
 
     server.num_clients = 0;
     server.uds_socket_path = NULL;
-    server.socket_type = TCP_IP;
+    server.socket_domain = TCP_IP;
 
     char line[1024];
 
@@ -37,7 +37,7 @@ server_t load_server_config(const char *path)
 
         if (strcmp(key, "unixsocket") == 0) {
             server.uds_socket_path = value;
-            server.socket_type = UNIX;
+            server.socket_domain = UNIX;
         }
 
         if (strcmp(key, "show-logo") == 0) {
@@ -100,7 +100,7 @@ client_t load_client_config(const char *path)
     client.verbose = false;
     client.benchmark_mode = false;
     client.uds_socket_path = NULL;
-    client.socket_type = TCP_IP;
+    client.socket_domain = TCP_IP;
 
     char line[1024];
 
@@ -127,7 +127,7 @@ client_t load_client_config(const char *path)
 
         if (strcmp(key, "unixsocket") == 0) {
             client.uds_socket_path = value;
-            client.socket_type = UNIX;
+            client.socket_domain = UNIX;
         }
     }
 
