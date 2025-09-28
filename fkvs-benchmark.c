@@ -267,7 +267,7 @@ int main(const int argc, char **argv)
     while (gate.ready < gate.need) {
         struct timespec abs;
         clock_gettime(CLOCK_REALTIME, &abs);
-        abs.tv_sec += 5; // We wait 5 seconds to gather
+        abs.tv_sec += 1; // We wait N seconds to gather
         const int rc = pthread_cond_timedwait(&gate.cv, &gate.mu, &abs);
         if (rc == ETIMEDOUT) {
             fprintf(stderr, "%d/%d workers ready.\n", gate.ready, gate.need);
