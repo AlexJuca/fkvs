@@ -103,6 +103,10 @@ void handle_sigint(int sig)
         }
     }
 
+    free(server.database->expires);
+    free(server.database->store);
+    free(server.database);
+
     close(server.fd);
     close(EPOLL_KQQUEUE_FD);
     exit(EXIT_SUCCESS);
@@ -180,9 +184,11 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
-    HashTable *ht = create_hash_table(8092);
+    server.database = malloc(sizeof(db_t));
+    server.database->store = create_hash_table(TABLE_SIZE);
+    server.database->expires = create_hash_table(TABLE_SIZE);
 
-    init_command_handlers(ht);
+    init_command_handlers(server.database->store);
 
     EPOLL_KQQUEUE_FD = run_event_loop();
 
