@@ -2,7 +2,8 @@
 #include <stdio.h>
 
 // DJB2 hash function
-size_t hash_function(unsigned char *key, size_t key_len, size_t table_size)
+size_t hash_function(const unsigned char *key, const size_t key_len,
+                     const size_t table_size)
 {
     size_t hash = 5381;
     for (size_t i = 0; i < key_len; i++) {
@@ -39,13 +40,12 @@ bool set_value(HashTable *table, unsigned char *key, size_t key_len,
                unsigned char *value, size_t value_len)
 {
     if (table->count >= table->capacity * 0.75) {
-        // Resize and rehash
-        // The function to resize and rehash would be implemented here
+        // TODO: The function to resize and rehash can be implemented here
     }
 
-    size_t index = hash_function(key, key_len, table->capacity);
+    const size_t index = hash_function(key, key_len, table->capacity);
     for (size_t i = 0; i < table->capacity; i++) {
-        size_t pos = (index + i) % table->capacity;
+        const size_t pos = (index + i) % table->capacity;
         if (!table->metadata[pos] ||
             (table->entries[pos].key_len == key_len &&
              memcmp(table->entries[pos].key, key, key_len) == 0)) {
@@ -74,9 +74,9 @@ bool get_value(HashTable *table, unsigned char *key, size_t key_len,
     if (!table || !key || !value || !value_len)
         return false;
 
-    size_t index = hash_function(key, key_len, table->capacity);
+    const size_t index = hash_function(key, key_len, table->capacity);
     for (size_t i = 0; i < table->capacity; i++) {
-        size_t pos = (index + i) % table->capacity;
+        const size_t pos = (index + i) % table->capacity;
         if (table->metadata[pos] && table->entries[pos].key_len == key_len &&
             memcmp(table->entries[pos].key, key, key_len) == 0) {
             *value = malloc(table->entries[pos].value_len);

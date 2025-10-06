@@ -26,6 +26,6 @@ bool set_value(HashTable *table, unsigned char *key, size_t key_len,
                unsigned char *value, size_t value_len);
 bool get_value(HashTable *table, unsigned char *key, size_t key_len,
                unsigned char **value, size_t *value_len);
-size_t hash_function(unsigned char *key, size_t key_len, size_t table_size);
+size_t hash_function(const unsigned char *key, size_t key_len, size_t table_size);
 
 #endif // HASHTABLE_H
