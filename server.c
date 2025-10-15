@@ -62,9 +62,9 @@ void daemonize()
 
 void print_usage_and_exit()
 {
-    fprintf(stderr, "usage: fkvs [-c config_path] \n");
-    fprintf(stderr, "fkvs --version \n");
-    fprintf(stderr, "fkvs -h or --help \n");
+    fprintf(stderr, "usage: fkvs-server [-c config_path] \n");
+    fprintf(stderr, "fkvs-server --version \n");
+    fprintf(stderr, "fkvs-server -h or --help \n");
 
     exit(1);
 }

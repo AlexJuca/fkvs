@@ -184,7 +184,8 @@ int start_client(client_t *client)
     }
 
     if (client->verbose) {
-        printf("Connected to server on port %d\n", client->port);
+        printf("Connected to server %s on port %d\n", client->ip_address,
+               client->port);
     }
     return client_fd;
 }

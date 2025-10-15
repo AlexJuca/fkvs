@@ -101,6 +101,9 @@ client_t load_client_config(const char *path)
     client.benchmark_mode = false;
     client.uds_socket_path = NULL;
     client.socket_domain = TCP_IP;
+    if (client.socket_domain == TCP_IP) {
+        client.ip_address = "127.0.0.1";
+    }
 
     char line[1024];
 

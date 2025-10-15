@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.31.2)
 
+add_subdirectory("deps/linenoise")
+
 project(fkvs-server C)
 project(fkvs-cli C)
 project(fkvs-benchmark C)
@@ -23,4 +25,5 @@ elseif(LINUX)
 endif()
   add_executable(fkvs-cli fkvs-cli.c config.c command_parser.c client_command_handlers.c)
   target_link_libraries(fkvs-benchmark PRIVATE Threads::Threads)
+  target_link_libraries(fkvs-cli PUBLIC linenoise)
   target_compile_definitions(fkvs-cli PRIVATE CLI)

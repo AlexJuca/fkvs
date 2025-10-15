@@ -2,6 +2,10 @@ CMakeFiles
 Makefile
 CmakeCache.txt
 cmake_install.cmake
+deps/*/CMakeFiles/
+deps/*/CmakeLists.txt
+deps/*/CMakeCache.txt
+deps/*/Makefile
 *fkvs-cli
 *fkvs-server
 *fkvs-benchmark

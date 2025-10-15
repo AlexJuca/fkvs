@@ -6,6 +6,11 @@ CMakeFiles/
 CmakeLists.txt
 CMakeCache.txt
 cmake_install.cmake
+deps/*/CMakeFiles/
+deps/*/CmakeLists.txt
+deps/*/CMakeCache.txt
+deps/*/cmake_install.cmake
+deps/*/Makefile
 Makefile
 fkvs.conf
 client.conf
