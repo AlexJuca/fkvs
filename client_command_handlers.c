@@ -8,144 +8,147 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define KEY_LEN 512
+#define VALUE_LEN 512
+
 void cmd_get(const command_args_t args, void (*response_cb)(client_t *client))
 {
-    if (!strcasecmp(args.cmd, "GET")) {
-        const char *key = strtok(NULL, " ");
-        if (key == NULL) {
-            printf("(error) ERR wrong number of arguments for 'get' command\n");
-            printf("(info) Usage: GET <key>\n");
-            return;
-        }
-
-        size_t cmd_len;
-        unsigned char *binary_cmd = construct_get_command(key, &cmd_len);
-        if (binary_cmd == NULL) {
-            fprintf(stderr, "Failed to construct GET command\n");
-            return;
-        }
-
-        send(args.client->fd, binary_cmd, cmd_len, 0);
-        free(binary_cmd);
-        response_cb(args.client);
+    if (strncmp(args.cmd, "GET ", 4) != 0) {
+        return;
     }
+
+    char key[KEY_LEN];
+    if (sscanf(args.cmd, "GET %511s", key) == 1) {
+
+    } else {
+        printf("(error) ERR wrong number of arguments for 'get' command\n");
+        printf("(info) Usage: GET <key>\n");
+        return;
+    }
+
+    size_t cmd_len;
+    unsigned char *binary_cmd = construct_get_command(key, &cmd_len);
+    if (binary_cmd == NULL) {
+        fprintf(stderr, "Failed to construct GET command\n");
+        return;
+    }
+
+    send(args.client->fd, binary_cmd, cmd_len, 0);
+    free(binary_cmd);
+    response_cb(args.client);
 }
 
 void cmd_set(const command_args_t args, void (*response_cb)(client_t *client))
 {
-    if (!strcasecmp(args.cmd, "SET")) {
-        const char *key = strtok(NULL, " ");
-        const char *value = strtok(NULL, " ");
-
-        if (key == NULL || value == NULL) {
-            printf("(error) ERR wrong number of arguments for 'set' command\n");
-            printf("(info) Usage: SET <key> <value>\n");
-            return;
-        }
-
-        size_t cmd_len;
-        unsigned char *binary_cmd = construct_set_command(key, value, &cmd_len);
-        if (binary_cmd == NULL) {
-            fprintf(stderr, "Failed to construct SET command\n");
-            return;
-        }
-
-        send(args.client->fd, binary_cmd, cmd_len, 0);
-        free(binary_cmd);
-        response_cb(args.client);
+    if (strncmp(args.cmd, "SET ", 4) != 0) {
+        return;
     }
+
+    char value[VALUE_LEN];
+    char key[KEY_LEN];
+    if (sscanf(args.cmd, "SET %511s %511s", key, value) == 2) {
+
+    } else {
+        printf("(error) ERR wrong number of arguments for 'set' command\n");
+        printf("(info) Usage: SET <key> <value>\n");
+        return;
+    }
+
+    size_t cmd_len;
+    unsigned char *binary_cmd = construct_set_command(key, value, &cmd_len);
+    if (binary_cmd == NULL) {
+        fprintf(stderr, "Failed to construct SET command\n");
+        return;
+    }
+
+    send(args.client->fd, binary_cmd, cmd_len, 0);
+    free(binary_cmd);
+    response_cb(args.client);
 }
 
 void cmd_incr(const command_args_t args, void (*response_cb)(client_t *client))
 {
-    if (!strcasecmp(args.cmd, "INCR")) {
-        const char *key = strtok(NULL, " ");
-        if (key == NULL) {
-            printf(
-                "(error) ERR wrong number of arguments for 'incr' command\n");
-            printf("(info) Usage: INCR <key>\n");
-            return;
-        }
-
-        size_t cmd_len;
-        unsigned char *binary_cmd = construct_incr_command(key, &cmd_len);
-        if (binary_cmd == NULL) {
-            fprintf(stderr, "(error) Failed to construct INCR command\n");
-            return;
-        }
-
-        send(args.client->fd, binary_cmd, cmd_len, 0);
-        free(binary_cmd);
-        response_cb(args.client);
+    if (strncmp(args.cmd, "INCR ", 4) != 0) {
+        return;
     }
+
+    char key[KEY_LEN];
+    if (sscanf(args.cmd, "INCR %511s", key) == 1) {
+
+    } else {
+        printf("(error) ERR wrong number of arguments for 'incr' command\n");
+        printf("(info) Usage: INCR <key> <value>\n");
+        return;
+    }
+
+    size_t cmd_len;
+    unsigned char *binary_cmd = construct_incr_command(key, &cmd_len);
+    if (binary_cmd == NULL) {
+        fprintf(stderr, "(error) Failed to construct INCR command\n");
+        return;
+    }
+
+    send(args.client->fd, binary_cmd, cmd_len, 0);
+    free(binary_cmd);
+    response_cb(args.client);
 }
 
 void cmd_incr_by(const command_args_t args,
                  void (*response_cb)(client_t *client))
 {
-    if (!strcasecmp(args.cmd, "INCRBY")) {
-        const char *key = strtok(NULL, " ");
-        const char *value = strtok(NULL, " ");
-
-        if (key == NULL || value == NULL) {
-            printf(
-                "(error) ERR wrong number of arguments for 'incrby' command\n");
-            printf("(info) Usage: INCRBY <key> <value>\n");
-            return;
-        }
-
-        size_t cmd_len;
-        unsigned char *binary_cmd =
-            construct_incr_by_command(key, value, &cmd_len);
-        if (binary_cmd == NULL) {
-            fprintf(stderr, "(error) Failed to construct INCR command\n");
-            return;
-        }
-
-        send(args.client->fd, binary_cmd, cmd_len, 0);
-        free(binary_cmd);
-        response_cb(args.client);
+    if (strncmp(args.cmd, "INCRBY ", 7) != 0) {
+        return;
     }
+
+    char key[KEY_LEN];
+    char value[VALUE_LEN];
+    if (sscanf(args.cmd, "INCRBY %511s %511s", key, value) == 2) {
+
+    } else {
+        printf("(error) ERR wrong number of arguments for 'incrby' command\n");
+        printf("(info) Usage: INCRBY <key> <value>\n");
+        return;
+    }
+
+    size_t cmd_len;
+    unsigned char *binary_cmd = construct_incr_by_command(key, value, &cmd_len);
+    if (binary_cmd == NULL) {
+        fprintf(stderr, "(error) Failed to construct INCR command\n");
+        return;
+    }
+
+    send(args.client->fd, binary_cmd, cmd_len, 0);
+    free(binary_cmd);
+    response_cb(args.client);
 }
 
 void cmd_ping(const command_args_t args, void (*response_cb)(client_t *client))
 {
-    if (!strcasecmp(args.cmd, "PING")) {
-        size_t cmd_len;
-        const char *value = NULL;
-        // TODO: I'm not happy with this solution, refactor this in future and
-        // handle edge cases, when value has a space
-        // in the middle, e.g, PING "hello world"
-        char *token = strtok(NULL, " ");
-        if (token != NULL) {
-            if (token[0] == '"') {
-                token = strtok(
-                    token + 1,
-                    "\""); // Skip the opening quote, get until closing quote
-                if (token == NULL) {
-                    value = "";
-                } else {
-                    value = token;
-                }
-            } else {
-                // Unquoted token (e.g., PING hello)
-                value = token;
-            }
-        } else {
-            // No argument (e.g., PING)
-            value = "";
-        }
-
-        unsigned char *binary_cmd = construct_ping_command(value, &cmd_len);
-        if (binary_cmd == NULL) {
-            fprintf(stderr, "Failed to construct PING command\n");
-            return;
-        }
-
-        send(args.client->fd, binary_cmd, cmd_len, 0);
-        free(binary_cmd);
-        response_cb(args.client);
+    if (strncmp(args.cmd, "PING ", 5) != 0) {
+        return;
     }
+
+    size_t cmd_len;
+    char value[VALUE_LEN];
+    if (sscanf(args.cmd, "PING \"%127[^\"]\"s", value) == 1) {
+
+    } else if (sscanf(args.cmd, "PING %127s", value) == 1) {
+
+    } else {
+        printf("(error) ERR wrong number of arguments for 'ping' command\n");
+        printf("(info) Usage: PING <key>\n");
+        return;
+    }
+
+    unsigned char *binary_cmd = construct_ping_command(value, &cmd_len);
+    if (binary_cmd == NULL) {
+        fprintf(stderr, "Failed to construct PING command\n");
+        return;
+    }
+
+    send(args.client->fd, binary_cmd, cmd_len, 0);
+    free(binary_cmd);
+    response_cb(args.client);
 }
 
 /*
@@ -156,9 +159,9 @@ void cmd_ping(const command_args_t args, void (*response_cb)(client_t *client))
 void cmd_unknown(const command_args_t args,
                  void (*response_cb)(client_t *client))
 {
-    if (strcasecmp(args.cmd, "INCR") && strcasecmp(args.cmd, "INCRBY") &&
-        strcasecmp(args.cmd, "GET") && strcasecmp(args.cmd, "SET") &&
-        strcasecmp(args.cmd, "PING")) {
+    if (strncmp(args.cmd, "INCR ", 5) && strncmp(args.cmd, "INCRBY ", 6) &&
+        strncmp(args.cmd, "GET ", 4) && strncmp(args.cmd, "SET ", 4) &&
+        strncmp(args.cmd, "PING ", 5)) {
         printf("Unknown command \n");
     }
 }
