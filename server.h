@@ -8,9 +8,9 @@
 #include <sys/types.h>
 
 typedef struct {
-  #define TABLE_SIZE 8092
-  HashTable *store;
-  HashTable *expires;
+#define TABLE_SIZE 8092
+    HashTable *store;
+    HashTable *expires;
 } db_t;
 
 typedef struct server_t {

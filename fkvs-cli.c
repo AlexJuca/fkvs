@@ -26,12 +26,7 @@ void run_repl(client_t client)
             break;
         }
 
-        const char *cmd_part = strtok(command, " ");
-        if (cmd_part == NULL) {
-            continue;
-        }
-
-        execute_command(cmd_part, &client, command_response_handler);
+        execute_command(command, &client, command_response_handler);
     }
 }
 
