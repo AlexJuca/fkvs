@@ -35,6 +35,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
 
       # Ensure toolchain availability per-OS
       - name: Install toolchain (Ubuntu/clang only)
