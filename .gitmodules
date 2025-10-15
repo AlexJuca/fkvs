@@ -1,4 +1,3 @@
-# append this to .gitmodules (edit with your editor)
 [submodule "deps/linenoise"]
   path = deps/linenoise
   url = git@github.com:AlexJuca/linenoise.git
