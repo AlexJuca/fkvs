@@ -41,7 +41,7 @@ void run_repl(client_t client)
             if (*line != '\0') {
                 execute_command(line, &client, command_response_handler);
                 linenoiseHistoryAdd(line);
-                linenoiseHistorySave(".fkvs_cli_history");
+                linenoiseHistorySave(cli_history_path);
             }
         }
     }
