@@ -16,7 +16,7 @@
 
 [![CMake on macOS & Ubuntu](https://github.com/AlexJuca/fkvs/actions/workflows/cmake-multi-platform.yml/badge.svg)](https://github.com/AlexJuca/fkvs/actions/workflows/cmake-multi-platform.yml)
 
-⚡ FKVS (Fast Key Value Store) is a tiny, **high‑performance** key‑value store written in C (with no dependencies) 
+⚡ FKVS (Fast Key Value Store) is a tiny, **high‑performance** key‑value store written in C
 with a single‑threaded, non‑blocking I/O multiplexed event loop.
 
 It is part of my experiment to understand what it takes to build a key value store similar to redis in C from first

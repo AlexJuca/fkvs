@@ -1,32 +1,49 @@
 #include "client.h"
 #include "client_command_handlers.h"
 #include "config.h"
+#include "deps/linenoise/linenoise.h"
 #include "networking.c"
+#include "utils.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 void run_repl(client_t client)
 {
-    char command[BUFFER_SIZE];
+    char cli_prompt[64];
+    snprintf(cli_prompt, sizeof(cli_prompt), "%s:%d> ",
+             strdup(client.ip_address), client.port);
+
+    char cli_history_path[512];
+    const char *home = getenv("HOME");
+    if (home) {
+        snprintf(cli_history_path, sizeof(cli_history_path),
+                 "%s/.fkvs_cli_history", home);
+        linenoiseHistoryLoad(cli_history_path);
+    } else {
+        linenoiseHistoryLoad(".fkvs_cli_history");
+    }
+
+    linenoiseHistorySetMaxLen(50);
 
     printf("Type 'exit' to quit.\n");
+    fflush(stdout);
+
+    char *line;
     while (1) {
-        if (client.socket_domain == TCP_IP) {
-            printf("%s:%d> ", client.ip_address, client.port);
-        } else {
-            printf("localhost> ");
-        }
-        if (fgets(command, BUFFER_SIZE, stdin) == NULL) {
-            break;
-        }
+        if ((line = linenoise(client.socket_domain == TCP_IP
+                                  ? cli_prompt
+                                  : "localhost:5995")) != NULL) {
+            if (strcmp(line, "exit") == 0) {
+                break;
+            }
 
-        command[strcspn(command, "\n")] = 0;
-        if (strcmp(command, "exit") == 0) {
-            break;
+            if (*line != '\0') {
+                execute_command(line, &client, command_response_handler);
+                linenoiseHistoryAdd(line);
+                linenoiseHistorySave(".fkvs_cli_history");
+            }
         }
-
-        execute_command(command, &client, command_response_handler);
     }
 }
 
