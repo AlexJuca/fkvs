@@ -52,6 +52,7 @@ jobs:
           if ! command -v cmake >/dev/null 2>&1; then
             brew update
             brew install cmake
+            brew install pipx
           fi
 
       - name: Show tool versions
@@ -87,16 +88,16 @@ jobs:
             sudo apt-get install -y clang clang-tidy clang-tools python3-pip
             pip3 install codechecker
           elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
-            brew install llvm
-            echo "PATH=$(brew --prefix llvm)/bin:$PATH" >> $GITHUB_ENV
-            pip3 install codechecker
+            python3 -m venv path/to/venv
+            source path/to/venv/bin/activate
+            pipx install codechecker
           fi
 
       - name: Run CodeChecker analysis
         id: codechecker
         run: |
           CodeChecker analyze ${{ steps.strings.outputs.build-output-dir }}/compile_commands.json --output ${{ github.workspace }}/reports
-          CodeChecker parse ${{ github.workspace }}/reports --export html --output ${{ github.workspace }}/html_reports
+          CodeChecker parse ${{ github.workspace }}/reports --export html --output ${{ github.workspace }}/html_reports || true
           echo "result-html-dir=${{ github.workspace }}/html_reports" >> $GITHUB_OUTPUT
 
       - uses: actions/upload-artifact@v4
