@@ -14,7 +14,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        build_type: [Release]
+        build_type: [Debug]
         c_compiler: [gcc, clang]
         include:
           # Ubuntu combos
@@ -73,17 +73,31 @@ jobs:
           cmake -B ${{ steps.strings.outputs.build-output-dir }}
           -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
           -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
-          -DCMAKE_BUILD_TYPE=Debug 
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} 
           -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
           -S ${{ github.workspace }}
 
       - name: Build
         run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
 
-      - uses: whisperity/codechecker-analysis-action@v1
+      - name: Install CodeChecker dependencies
+        run: |
+          if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
+            sudo apt-get update
+            sudo apt-get install -y clang clang-tidy clang-tools python3-pip
+            pip3 install codechecker
+          elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+            brew install llvm
+            echo "PATH=$(brew --prefix llvm)/bin:$PATH" >> $GITHUB_ENV
+            pip3 install codechecker
+          fi
+
+      - name: Run CodeChecker analysis
         id: codechecker
-        with:
-          logfile: ${{ github.workspace }}/Build/compile_commands.json
+        run: |
+          CodeChecker analyze ${{ steps.strings.outputs.build-output-dir }}/compile_commands.json --output ${{ github.workspace }}/reports
+          CodeChecker parse ${{ github.workspace }}/reports --export html --output ${{ github.workspace }}/html_reports
+          echo "result-html-dir=${{ github.workspace }}/html_reports" >> $GITHUB_OUTPUT
 
       - uses: actions/upload-artifact@v4
         with:
@@ -92,4 +106,4 @@ jobs:
 
       - name: Test
         working-directory: ${{ steps.strings.outputs.build-output-dir }}
-        run: ctest --build-config ${{ matrix.build_type }}
+        run: ctest -C ${{ matrix.build_type }}
