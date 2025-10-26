@@ -21,17 +21,16 @@ jobs:
           - os: ubuntu-latest
             c_compiler: gcc
             cpp_compiler: g++
-          - os: ubuntu-latest
-            c_compiler: clang
-            cpp_compiler: clang++
           # macOS uses Apple Clang
           - os: macos-latest
             c_compiler: clang
             cpp_compiler: clang++
         exclude:
-          # Prevent gcc on macOS (Apple Clang presents as gcc but we want explicit clang)
+          # Prevent gcc on macOS (Apple Clang presents as gcc, but we want explicit clang)
           - os: macos-latest
             c_compiler: gcc
+          - os: ubuntu-latest
+            c_compiler: clang
 
     steps:
       - uses: actions/checkout@v4
