@@ -14,24 +14,23 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        build_type: [Release]
+        build_type: [Debug]
         c_compiler: [gcc, clang]
         include:
           # Ubuntu combos
           - os: ubuntu-latest
             c_compiler: gcc
             cpp_compiler: g++
-          - os: ubuntu-latest
-            c_compiler: clang
-            cpp_compiler: clang++
           # macOS uses Apple Clang
           - os: macos-latest
             c_compiler: clang
             cpp_compiler: clang++
         exclude:
-          # Prevent gcc on macOS (Apple Clang presents as gcc but we want explicit clang)
+          # Prevent gcc on macOS (Apple Clang presents as gcc, but we want explicit clang)
           - os: macos-latest
             c_compiler: gcc
+          - os: ubuntu-latest
+            c_compiler: clang
 
     steps:
       - uses: actions/checkout@v4
@@ -52,6 +51,7 @@ jobs:
           if ! command -v cmake >/dev/null 2>&1; then
             brew update
             brew install cmake
+            brew install pipx
           fi
 
       - name: Show tool versions
@@ -73,12 +73,37 @@ jobs:
           cmake -B ${{ steps.strings.outputs.build-output-dir }}
           -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
           -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
-          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} 
+          -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
           -S ${{ github.workspace }}
 
       - name: Build
         run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
 
+      - name: Install CodeChecker dependencies
+        run: |
+          if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
+            sudo apt-get update
+            sudo apt-get install -y clang clang-tidy clang-tools python3-pip
+            pip3 install codechecker
+          elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+            python3 -m venv path/to/venv
+            source path/to/venv/bin/activate
+            pipx install codechecker
+          fi
+
+      - name: Run CodeChecker analysis
+        id: codechecker
+        run: |
+          CodeChecker analyze ${{ steps.strings.outputs.build-output-dir }}/compile_commands.json --output ${{ github.workspace }}/reports
+          CodeChecker parse ${{ github.workspace }}/reports --export html --output ${{ github.workspace }}/html_reports || true
+          echo "result-html-dir=${{ github.workspace }}/html_reports" >> $GITHUB_OUTPUT
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: "CodeChecker Bug Reports"
+          path: ${{ steps.codechecker.outputs.result-html-dir }}
+
       - name: Test
         working-directory: ${{ steps.strings.outputs.build-output-dir }}
-        run: ctest --build-config ${{ matrix.build_type }}
+        run: ctest -C ${{ matrix.build_type }}
