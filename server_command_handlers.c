@@ -9,9 +9,9 @@
 #include <sys/errno.h>
 #include <sys/socket.h>
 
-static HashTable *table = NULL;
+static hashtable_t *table = NULL;
 
-void init_command_handlers(HashTable *ht)
+void init_command_handlers(hashtable_t *ht)
 {
     table = ht;
     register_command(CMD_SET, handle_set_command);
@@ -19,6 +19,7 @@ void init_command_handlers(HashTable *ht)
     register_command(CMD_INCR, handle_incr_command);
     register_command(CMD_INCR_BY, handle_incr_by_command);
     register_command(CMD_PING, handle_ping_command);
+    register_command(CMD_DECR, handle_decr_command);
 }
 
 void handle_set_command(int client_fd, unsigned char *buffer, size_t bytes_read)
@@ -102,7 +103,13 @@ void handle_set_command(int client_fd, unsigned char *buffer, size_t bytes_read)
         printf("Wrote %d bytes to database \n", value_len);
     }
 
-    set_value(table, &buffer[pos_key], key_len, &buffer[pos_value], value_len);
+    if (!is_integer(&buffer[pos_value], value_len)) {
+        set_value(table, &buffer[pos_key], key_len, &buffer[pos_value],
+                  value_len, VALUE_ENTRY_TYPE_RAW);
+    }
+
+    set_value(table, &buffer[pos_key], key_len, &buffer[pos_value], value_len,
+              VALUE_ENTRY_TYPE_INT);
 
     send_reply(client_fd, &buffer[pos_value], value_len);
     free(data);
@@ -115,11 +122,21 @@ void handle_get_command(int client_fd, unsigned char *buffer, size_t bytes_read)
     const size_t key_len = buffer[3] << 8 | buffer[4];
 
     if (bytes_read - 2 == command_len) {
-        unsigned char *value;
+        value_entry_t *value;
         size_t value_len;
         if (get_value(table, &buffer[5], key_len, &value, &value_len)) {
-            send_reply(client_fd, value, value_len);
-            free(value);
+            unsigned char *resp_buffer = malloc(value->value_len + 1);
+            if (!resp_buffer) {
+                send_error(client_fd);
+                perror("malloc failed");
+                free(buffer);
+            }
+
+            memcpy(resp_buffer, value->ptr, value_len);
+            resp_buffer[value_len] = '\0';
+            printf("Returning: %s \n", (const char *)resp_buffer);
+            send_reply(client_fd, resp_buffer, value_len);
+            free(resp_buffer);
         } else {
             send_error(client_fd);
         }
@@ -141,7 +158,7 @@ void handle_incr_command(int client_fd, unsigned char *buffer,
         return;
     }
 
-    unsigned char *value;
+    value_entry_t *value;
     size_t value_len;
 
     if (!get_value(table, &buffer[5], key_len, &value, &value_len)) {
@@ -149,52 +166,37 @@ void handle_incr_command(int client_fd, unsigned char *buffer,
         return;
     }
 
-    if (!is_integer(value, value_len)) {
+    if (value->encoding != VALUE_ENTRY_TYPE_INT) {
         fprintf(stderr, "Stored value is not an integer.\n");
         send_error(client_fd);
         free(value);
         return;
     }
 
-    // Null-terminate stored value
-    char *old_str = strndup((const char *)value, value_len);
-    if (!old_str) {
-        fprintf(stderr, "Allocation failed.\n");
-        send_error(client_fd);
-        free(value);
-        return;
+    const uint64_t current = strtoull(value->ptr, NULL, 10);
+    const uint64_t sum = current + 1;
+
+    if (server.verbose) {
+        printf("Value incremented to %llu\n", (uint64_t)sum);
     }
 
-    const char *one_str = "1";
-    char *result_str = add_strings(old_str, one_str);
-    if (!result_str) {
-        send_error(client_fd);
-        free(value);
-        free(old_str);
-        return;
-    }
+    char *reply = uint64_to_string(sum);
+    const size_t reply_len = strlen(reply);
 
-    const size_t result_len = strlen(result_str);
-
-    if (!set_value(table, &buffer[5], key_len, (unsigned char *)result_str,
-                   result_len)) {
+    if (!set_value(table, &buffer[5], key_len, reply, reply_len,
+                   VALUE_ENTRY_TYPE_INT)) {
         fprintf(stderr, "Unable to set incremented value.\n");
         send_error(client_fd);
-        free(value);
-        free(old_str);
-        free(result_str);
+        free(reply);
         return;
     }
 
-    send_reply(client_fd, (unsigned char *)result_str, result_len);
-
-    free(value);
-    free(old_str);
-    free(result_str);
+    send_reply(client_fd, (const unsigned char *)reply, reply_len);
+    free(reply);
 }
 
-void handle_incr_by_command(int client_fd, unsigned char *buffer,
-                            size_t bytes_read)
+void handle_incr_by_command(const int client_fd, unsigned char *buffer,
+                            const size_t bytes_read)
 {
     const size_t command_len = (buffer[0] << 8) | buffer[1];
     const size_t key_len = (buffer[3] << 8) | buffer[4];
@@ -213,7 +215,13 @@ void handle_incr_by_command(int client_fd, unsigned char *buffer,
         return;
     }
 
-    const unsigned char *incr_str = &buffer[pos + 2];
+    unsigned char *incr_str = malloc(pos + 2 + incr_len);
+    if (!incr_str) {
+        send_error(client_fd);
+        return;
+    }
+
+    memcpy(incr_str, buffer + pos + 2, incr_len);
 
     if (!is_integer(incr_str, incr_len)) {
         fprintf(stderr, "Increment value is not an integer.\n");
@@ -227,61 +235,41 @@ void handle_incr_by_command(int client_fd, unsigned char *buffer,
         return;
     }
 
-    unsigned char *old_value;
+    value_entry_t *old_value;
     size_t old_value_len;
     if (!get_value(table, &buffer[5], key_len, &old_value, &old_value_len)) {
         send_error(client_fd);
         return;
     }
 
-    if (!is_integer(old_value, old_value_len)) {
+    if (old_value->encoding != VALUE_ENTRY_TYPE_INT) {
         fprintf(stderr, "Stored value is not an integer.\n");
         send_error(client_fd);
         free(old_value);
         return;
     }
 
-    // Null-terminate both old and incr strings
-    char *old_str = strndup((const char *)old_value, old_value_len);
-    char *incr_dup = strndup((const char *)incr_str, incr_len);
+    const uint64_t current = strtoull(old_value->ptr, NULL, 10);
+    const uint64_t increment = strtoull((const char *)incr_str, NULL, 10);
 
-    if (!old_str || !incr_dup) {
-        fprintf(stderr, "Allocation failed.\n");
-        send_error(client_fd);
-        free(old_value);
-        free(old_str);
-        free(incr_dup);
-        return;
+    const uint64_t sum = current + increment;
+    if (server.verbose) {
+        printf("Value incremented to %llu\n", sum);
     }
 
-    char *result_str = add_strings(old_str, incr_dup);
-    if (!result_str) {
-        send_error(client_fd);
-        free(old_value);
-        free(old_str);
-        free(incr_dup);
-        return;
-    }
+    const char *result = uint64_to_string(sum);
+    const size_t result_len = strlen(result);
 
-    const size_t result_len = strlen(result_str);
-
-    if (!set_value(table, &buffer[5], key_len, (unsigned char *)result_str,
-                   result_len)) {
+    if (!set_value(table, &buffer[5], key_len, (unsigned char *)result,
+                   result_len, VALUE_ENTRY_TYPE_INT)) {
         fprintf(stderr, "Unable to set incremented value.\n");
         send_error(client_fd);
         free(old_value);
-        free(old_str);
-        free(incr_dup);
-        free(result_str);
         return;
     }
 
-    send_reply(client_fd, (unsigned char *)result_str, result_len);
-
+    send_reply(client_fd, (unsigned char *)result, result_len);
     free(old_value);
-    free(old_str);
-    free(incr_dup);
-    free(result_str);
 }
 
 void handle_ping_command(int client_fd, unsigned char *buffer,
@@ -301,4 +289,49 @@ void handle_ping_command(int client_fd, unsigned char *buffer,
         fprintf(stderr, "Incomplete command data for PING.\n");
         send_error(client_fd);
     }
+}
+
+void handle_decr_command(int client_fd, unsigned char *buffer,
+                         size_t bytes_read)
+{
+    const size_t command_len = (buffer[0] << 8) | buffer[1];
+    const size_t key_len = (buffer[3] << 8) | buffer[4];
+
+    if (bytes_read - 2 != command_len) {
+        fprintf(stderr, "Incomplete command data for DECR.\n");
+        send_error(client_fd);
+        return;
+    }
+
+    value_entry_t *value;
+    size_t value_len;
+
+    if (!get_value(table, &buffer[5], key_len, &value, &value_len)) {
+        send_error(client_fd);
+        return;
+    }
+
+    if (!is_integer(value->ptr, value_len)) {
+        fprintf(stderr, "Stored value is not an integer.\n");
+        send_error(client_fd);
+        free(value);
+        return;
+    }
+
+    const int64_t current = strtoll(value->ptr, NULL, 10);
+    const int64_t decrement = current - 1;
+
+    const char *result_str = int64_to_string(decrement);
+    const size_t result_len = strlen(result_str);
+
+    if (!set_value(table, &buffer[5], key_len, (unsigned char *)result_str,
+                   result_len, VALUE_ENTRY_TYPE_INT)) {
+        fprintf(stderr, "Unable to set incremented value.\n");
+        send_error(client_fd);
+        return;
+    }
+
+
+    send_reply(client_fd, (unsigned char *)result_str, result_len);
+    free(value);
 }

@@ -81,6 +81,7 @@ Type 'exit' to quit.
 - GET key
 - INCR key
 - INCRBY key value
+- DECR key
 
 
 ## Benchmarking

@@ -77,7 +77,7 @@ void cmd_incr(const command_args_t args, void (*response_cb)(client_t *client))
 
     } else {
         printf("(error) ERR wrong number of arguments for 'incr' command\n");
-        printf("(info) Usage: INCR <key> <value>\n");
+        printf("(info) Usage: INCR <key>\n");
         return;
     }
 
@@ -132,17 +132,46 @@ void cmd_ping(const command_args_t args, void (*response_cb)(client_t *client))
     char value[VALUE_LEN];
     if (sscanf(args.cmd, "PING \"%127[^\"]\"s", value) == 1) {
 
+    } else if (sscanf(args.cmd, "PING") == 1) {
+
     } else if (sscanf(args.cmd, "PING %127s", value) == 1) {
 
     } else {
         printf("(error) ERR wrong number of arguments for 'ping' command\n");
-        printf("(info) Usage: PING <key>\n");
+        printf("(info) Usage: PING or PING <key> \n");
         return;
     }
 
     unsigned char *binary_cmd = construct_ping_command(value, &cmd_len);
     if (binary_cmd == NULL) {
         fprintf(stderr, "Failed to construct PING command\n");
+        return;
+    }
+
+    send(args.client->fd, binary_cmd, cmd_len, 0);
+    free(binary_cmd);
+    response_cb(args.client);
+}
+
+void cmd_decr(const command_args_t args, void (*response_cb)(client_t *client))
+{
+    if (strncmp(args.cmd, "DECR ", 4) != 0) {
+        return;
+    }
+
+    char key[KEY_LEN];
+    if (sscanf(args.cmd, "DECR %511s", key) == 1) {
+
+    } else {
+        printf("(error) ERR wrong number of arguments for 'decr' command\n");
+        printf("(info) Usage: DECR <key>\n");
+        return;
+    }
+
+    size_t cmd_len;
+    unsigned char *binary_cmd = construct_decr_command(key, &cmd_len);
+    if (binary_cmd == NULL) {
+        fprintf(stderr, "(error) Failed to construct DECR command\n");
         return;
     }
 
@@ -161,15 +190,16 @@ void cmd_unknown(const command_args_t args,
 {
     if (strncmp(args.cmd, "INCR ", 5) && strncmp(args.cmd, "INCRBY ", 6) &&
         strncmp(args.cmd, "GET ", 4) && strncmp(args.cmd, "SET ", 4) &&
-        strncmp(args.cmd, "PING ", 5)) {
+        strncmp(args.cmd, "PING ", 5) && strncmp(args.cmd, "DECR ", 5)) {
         printf("Unknown command \n");
     }
 }
 
 const cmd_t command_table[] = {
-    {"cmd_set", cmd_set},   {"cmd_get", cmd_get},
-    {"cmd_incr", cmd_incr}, {"cmd_incr_by", cmd_incr_by},
-    {"cmd_ping", cmd_ping}, {"cmd_unknown", cmd_unknown}};
+    {"cmd_set", cmd_set},         {"cmd_get", cmd_get},
+    {"cmd_decr", cmd_decr},       {"cmd_incr", cmd_incr},
+    {"cmd_incr_by", cmd_incr_by}, {"cmd_ping", cmd_ping},
+    {"cmd_unknown", cmd_unknown}};
 
 void execute_command(const char *cmd, client_t *client,
                      void (*response_cb)(client_t *client))

@@ -84,7 +84,7 @@ static bool is_integer(const unsigned char *str, const size_t len)
     return true;
 }
 
-static char *int_to_string(const uint64_t number)
+static char *uint64_to_string(const uint64_t number)
 {
     char *buffer = malloc(22 * sizeof(char));
     if (buffer == NULL) {
@@ -93,6 +93,17 @@ static char *int_to_string(const uint64_t number)
 
     snprintf(buffer, 22, "%" PRIu64, number);
     return buffer;
+}
+
+static char *int64_to_string(const int64_t number)
+{
+  char *buffer = malloc(32);
+  if (buffer == NULL) {
+    return NULL;
+  }
+
+  snprintf(buffer, 22, "%" PRId64, number);
+  return buffer;
 }
 
 // Adds two decimal integer strings (can include leading '+' or '-')

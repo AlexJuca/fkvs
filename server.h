@@ -9,8 +9,8 @@
 
 typedef struct {
 #define TABLE_SIZE 8092
-    HashTable *store;
-    HashTable *expires;
+    hashtable_t *store;
+    hashtable_t *expires;
 } db_t;
 
 typedef struct server_t {
