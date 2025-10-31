@@ -42,9 +42,9 @@ void run_repl(client_t client)
                 execute_command(line, &client, command_response_handler);
                 linenoiseHistoryAdd(line);
                 if (home) {
-                  linenoiseHistorySave(cli_history_path);
+                    linenoiseHistorySave(cli_history_path);
                 } else {
-                  linenoiseHistorySave(".fkvs_cli_history");
+                    linenoiseHistorySave(".fkvs_cli_history");
                 }
             }
         }

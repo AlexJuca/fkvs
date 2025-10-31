@@ -6,5 +6,6 @@
 #define CMD_INCR 0x03
 #define CMD_INCR_BY 0x04
 #define CMD_PING 0x05
+#define CMD_DECR 0x06
 
 #endif // COMMAND_DEFS_H

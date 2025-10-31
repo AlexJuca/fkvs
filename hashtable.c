@@ -1,5 +1,6 @@
 #include "hashtable.h"
 #include <stdio.h>
+#include <string.h>
 
 // DJB2 hash function
 size_t hash_function(unsigned char *key, size_t key_len, size_t table_size)
@@ -12,20 +13,20 @@ size_t hash_function(unsigned char *key, size_t key_len, size_t table_size)
 }
 
 // Create a new hash table
-HashTable *create_hash_table(size_t size)
+hashtable_t *create_hash_table(size_t size)
 {
-    HashTable *table = malloc(sizeof(HashTable));
-    table->buckets = calloc(size, sizeof(HashTableEntry *));
+    hashtable_t *table = malloc(sizeof(hashtable_t));
+    table->buckets = calloc(size, sizeof(hash_table_entry_t *));
     table->size = size;
     return table;
 }
 
-void free_hash_table(HashTable *table)
+void free_hash_table(hashtable_t *table)
 {
     for (size_t i = 0; i < table->size; i++) {
-        HashTableEntry *entry = table->buckets[i];
+        hash_table_entry_t *entry = table->buckets[i];
         while (entry) {
-            HashTableEntry *next = entry->next;
+            hash_table_entry_t *next = entry->next;
             free(entry->key);
             free(entry->value);
             free(entry);
@@ -36,18 +37,18 @@ void free_hash_table(HashTable *table)
     free(table);
 }
 
-bool set_value(HashTable *table, unsigned char *key, size_t key_len,
-               unsigned char *value, size_t value_len)
+bool set_value(hashtable_t *table, unsigned char *key, size_t key_len,
+               void *value, size_t value_len, int value_type_encoding)
 {
-    size_t index = hash_function(key, key_len, table->size);
-    HashTableEntry *current = table->buckets[index];
+    const size_t index = hash_function(key, key_len, table->size);
+    hash_table_entry_t *current = table->buckets[index];
     while (current != NULL && (current->key_len != key_len ||
                                memcmp(current->key, key, key_len) != 0)) {
         current = current->next;
     }
     if (current == NULL) {
         // New entry
-        current = malloc(sizeof(HashTableEntry));
+        current = malloc(sizeof(hash_table_entry_t));
         current->key = malloc(key_len);
         memcpy(current->key, key, key_len);
         current->key_len = key_len;
@@ -55,32 +56,37 @@ bool set_value(HashTable *table, unsigned char *key, size_t key_len,
         table->buckets[index] = current;
     } else {
         // Update existing entry
-        free(current->value);
+        free(current->value->ptr);
     }
-    current->value = malloc(value_len);
-    memcpy(current->value, value, value_len);
-    current->value_len = value_len;
+    current->value = malloc(sizeof(value_entry_t));
+    current->value->ptr = malloc(value_len);
+    current->value->encoding = value_type_encoding;
+    memcpy(current->value->ptr, value, value_len);
+    current->value->value_len = value_len;
     return true;
 }
 
-bool get_value(HashTable *table, unsigned char *key, size_t key_len,
-               unsigned char **value, size_t *value_len)
+bool get_value(hashtable_t *table, unsigned char *key, size_t key_len,
+               value_entry_t **value, size_t *value_len)
 {
     if (!table || !key || !value || !value_len)
         return false;
 
-    size_t index = hash_function(key, key_len, table->size);
-    for (HashTableEntry *current = table->buckets[index]; current;
+    const size_t index = hash_function(key, key_len, table->size);
+    for (const hash_table_entry_t *current = table->buckets[index]; current;
          current = current->next) {
         if (current->key_len == key_len &&
             memcmp(current->key, key, key_len) == 0) {
-            unsigned char *out = malloc(current->value_len);
+            value_entry_t *out = malloc(sizeof(current->value));
             if (!out)
                 return false; // allocation failed
 
-            memcpy(out, current->value, current->value_len);
+            out->ptr = current->value->ptr;
+            out->encoding = current->value->encoding;
+            out->expirable = current->value->expirable;
+            out->type = current->value->type;
             *value = out;
-            *value_len = current->value_len;
+            *value_len = current->value->value_len;
             return true;
         }
     }
