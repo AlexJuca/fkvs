@@ -80,8 +80,11 @@ jobs:
       - name: Build
         run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
 
-      - name: Generate compile command json database
-        run: cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=on -B ${{ steps.strings.outputs.build-output-dir }}
+      - name: Generate compile commands json database
+        run: > 
+            cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=on
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+            -B ${{ steps.strings.outputs.build-output-dir }}
 
       - name: Install CodeChecker dependencies
         run: |
