@@ -74,11 +74,14 @@ jobs:
           -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
           -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
           -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} 
-          -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          -DCMAKE_EXPORT_COMPILE_COMMANDS=on
           -S ${{ github.workspace }}
 
       - name: Build
         run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
+
+      - name: Generate compile command json database
+        run: cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=on -B ${{ steps.strings.outputs.build-output-dir }}
 
       - name: Install CodeChecker dependencies
         run: |
