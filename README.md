@@ -47,6 +47,10 @@ rm /etc/apt/trusted.gpg.d/kitware.gpg
 sudo apt update
 sudo apt install cmake
 
+cd deps/linenoise
+git submodule init
+git module update
+cd ../../
 cmake .
 cmake --build .
 ./fkvs-server -c
@@ -57,8 +61,12 @@ cmake --build .
 ```shell
 brew install cmake
 
-cmake .
+cd deps/linenoise
+git submodule init
+git module update
+cd ../../
 
+cmake .
 cmake --build .
 
 ./fkvs-server -c
