@@ -83,7 +83,6 @@ jobs:
       - name: Generate compile commands json database
         run: > 
             cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=on
-            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
             -B ${{ steps.strings.outputs.build-output-dir }}
 
       - name: Install CodeChecker dependencies
