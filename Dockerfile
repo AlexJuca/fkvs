@@ -11,14 +11,13 @@ RUN apt-get update; \
     echo "deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ $(lsb_release -cs) main" \
       > /etc/apt/sources.list.d/kitware.list; \
     apt-get update; \
-    apt-get install -y --no-install-recommends cmake; \
+    apt-get install -y cmake; \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
 COPY . .
 RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release; \
-    cmake --build build -j; \
-    strip build/fkvs-server build/fkvs-cli || true
+    cmake --build build -j;
 
 FROM debian:stable-slim AS runtime
 ENV DEBIAN_FRONTEND=noninteractive

@@ -2,7 +2,7 @@
 #ifndef CLIENT_COMMAND_HANDLERS
 #define CLIENT_COMMAND_HANDLERS
 
-#include "client.h"
+#include "../../client.h"
 
 typedef struct {
     const char *cmd;

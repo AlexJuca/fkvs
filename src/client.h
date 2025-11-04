@@ -1,7 +1,7 @@
 #ifndef CLIENT_H
 #define CLIENT_H
 
-#include "modes.h"
+#include "networking/modes.h"
 
 #include <arpa/inet.h>
 #include <stdbool.h>

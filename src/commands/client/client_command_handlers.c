@@ -1,9 +1,9 @@
-#include "client_command_handlers.h"
-#include "client.h"
-#include "command_defs.h"
-#include "command_parser.h"
-#include "keygen.h"
-#include "utils.h"
+#include "../../commands/client/client_command_handlers.h"
+#include "../../keygen.h"
+#include "../../utils.h"
+#include "../../client.h"
+#include "../../commands/common/command_parser.h"
+#include "../../commands/common/command_defs.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

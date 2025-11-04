@@ -1,9 +1,9 @@
 #ifndef SERVER_H
 #define SERVER_H
 
-#include "hashtable.h"
-#include "list.h"
-#include "modes.h"
+#include "core/hashtable.h"
+#include "core/list.h"
+#include "networking/modes.h"
 #include <stdbool.h>
 #include <sys/types.h>
 

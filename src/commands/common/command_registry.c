@@ -1,7 +1,7 @@
-#include "command_registry.h"
-#include "command_defs.h"
-#include "response_defs.h"
-#include "utils.h"
+#include "../common/command_registry.h"
+#include "../../response_defs.h"
+#include "../../utils.h"
+#include "../common/command_defs.h"
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>

@@ -1,13 +1,11 @@
 #ifdef __linux__
-#include "client.h"
-#include "modes.h"
-
-#include "client.h"
+#include "../client.h"
+#include "../networking/modes.h"
 #include "event_dispatcher.h"
-#include "list.h"
-#include "networking.h"
-#include "server.h"
-#include "utils.h"
+#include "../core/list.h"
+#include "../networking/networking.h"
+#include "../server.h"
+#include "../utils.h"
 
 #include <arpa/inet.h>
 #include <errno.h>
