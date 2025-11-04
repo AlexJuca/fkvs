@@ -1,8 +1,8 @@
 #ifndef UTILS_H
 #define UTILS_H
 
-#include "main.h"
 #include "client.h"
+#include "main.h"
 #include "server.h"
 #include <inttypes.h>
 #include <stdio.h>
@@ -97,13 +97,13 @@ static char *uint64_to_string(const uint64_t number)
 
 static char *int64_to_string(const int64_t number)
 {
-  char *buffer = malloc(32);
-  if (buffer == NULL) {
-    return NULL;
-  }
+    char *buffer = malloc(32);
+    if (buffer == NULL) {
+        return NULL;
+    }
 
-  snprintf(buffer, 22, "%" PRId64, number);
-  return buffer;
+    snprintf(buffer, 22, "%" PRId64, number);
+    return buffer;
 }
 
 // Adds two decimal integer strings (can include leading '+' or '-')

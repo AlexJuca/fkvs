@@ -177,7 +177,7 @@ void handle_incr_command(int client_fd, unsigned char *buffer,
     const uint64_t sum = current + 1;
 
     if (server.verbose) {
-        printf("Value incremented to %llu\n", (uint64_t)sum);
+        printf("Value incremented to %llu\n", sum);
     }
 
     char *reply = uint64_to_string(sum);
@@ -330,7 +330,6 @@ void handle_decr_command(int client_fd, unsigned char *buffer,
         send_error(client_fd);
         return;
     }
-
 
     send_reply(client_fd, (unsigned char *)result_str, result_len);
     free(value);

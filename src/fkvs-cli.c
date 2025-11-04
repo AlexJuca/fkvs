@@ -1,7 +1,7 @@
-#include "config.h"
 #include "../deps/linenoise/linenoise.h"
 #include "client.h"
 #include "commands/client/client_command_handlers.h"
+#include "config.h"
 #include "networking/networking.c"
 #include "utils.h"
 #include <stdio.h>
