@@ -1,11 +1,9 @@
+#include "commands/server/server_command_handlers.h"
 #include "config.h"
-#include "io/event_dispatcher.h"
-#include "utils.h"
-#include "core/list.h"
 #include "core/hashtable.h"
 #include "core/list.h"
+#include "io/event_dispatcher.h"
 #include "networking/networking.h"
-#include "commands/server/server_command_handlers.h"
 #include "utils.h"
 #include <errno.h>
 #include <fcntl.h>
