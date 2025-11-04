@@ -1,6 +1,6 @@
 #include "client.h"
-#include "client_command_handlers.h"
-#include "networking.h"
+#include "commands/client/client_command_handlers.h"
+#include "networking/networking.h"
 #include <errno.h>
 #include <netinet/tcp.h>
 #include <pthread.h>

@@ -1,7 +1,7 @@
 #ifndef COMMAND_PARSER_H
 #define COMMAND_PARSER_H
 
-#include "hashtable.h"
+#include "../../core/hashtable.h"
 
 void handle_command(hashtable_t *table, int client_fd,
                     const unsigned char *buffer, size_t bytes_read);

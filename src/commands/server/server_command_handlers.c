@@ -1,9 +1,9 @@
-#include "server_command_handlers.h"
-#include "command_defs.h"
-#include "command_registry.h"
-#include "hashtable.h"
-#include "response_defs.h"
-#include "utils.h"
+#include "../../commands/server/server_command_handlers.h"
+#include "../../core/hashtable.h"
+#include "../../response_defs.h"
+#include "../../utils.h"
+#include "../common/command_defs.h"
+#include "../common/command_registry.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/errno.h>

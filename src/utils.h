@@ -1,8 +1,8 @@
 #ifndef UTILS_H
 #define UTILS_H
 
-#include "client.h"
 #include "main.h"
+#include "client.h"
 #include "server.h"
 #include <inttypes.h>
 #include <stdio.h>

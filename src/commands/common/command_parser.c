@@ -1,6 +1,6 @@
-#include "command_parser.h"
-#include "command_defs.h"
-#include "utils.h"
+#include "../common/command_parser.h"
+#include "../../utils.h"
+#include "../common/command_defs.h"
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>

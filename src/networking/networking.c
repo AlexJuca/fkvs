@@ -1,6 +1,6 @@
 #include "networking.h"
-#include "client.h"
-#include "utils.h"
+#include "../client.h"
+#include "../utils.h"
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <netinet/in.h>
@@ -14,7 +14,7 @@
 
 #ifdef SERVER
 
-#include "command_registry.h"
+#include "../commands/common/command_registry.h"
 
 int start_server()
 {

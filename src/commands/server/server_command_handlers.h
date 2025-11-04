@@ -1,7 +1,7 @@
 #ifndef SERVER_COMMAND_HANDLERS_H
 #define SERVER_COMMAND_HANDLERS_H
 
-#include "hashtable.h"
+#include "../../core/hashtable.h"
 
 void init_command_handlers(hashtable_t *ht);
 

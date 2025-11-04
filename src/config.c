@@ -1,6 +1,6 @@
 #include "config.h"
 #include "client.h"
-#include "networking.h"
+#include "networking/networking.h"
 #include "utils.h"
 #include <stdio.h>
 #include <stdlib.h>

@@ -3,8 +3,8 @@
 
 #define FKVS_SOCK_PATH "/tmp/fkvs.sock"
 
-#include "client.h"
-#include "server.h"
+#include "../client.h"
+#include "../server.h"
 
 #ifdef SERVER
 int start_server();
