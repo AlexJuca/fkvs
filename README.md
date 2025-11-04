@@ -47,12 +47,8 @@ rm /etc/apt/trusted.gpg.d/kitware.gpg
 sudo apt update
 sudo apt install cmake
 
-cd deps/linenoise
-git submodule init
-git submodule update
-cd ../../
-cmake .
-cmake --build .
+make -f Makefile.fkvs setup-and-build
+
 ./fkvs-server -c
 ```
 
@@ -61,13 +57,7 @@ cmake --build .
 ```shell
 brew install cmake
 
-cd deps/linenoise
-git submodule init
-git submodule update
-cd ../../
-
-cmake .
-cmake --build .
+make -f Makefile.fkvs setup-and-build
 
 ./fkvs-server -c
 ```
@@ -171,7 +161,7 @@ Start the server:
 ./fkvs-server -c
 ```
 
-and use the `-u` argument when invoking fkvs-benchmark:
+and use the `-u` argument when invoking fkvs-benchmark to ensure we connect via unix domain sockets:
 
 ```shell
 ./fkvs-benchmark -u -n 1000000 -c 25 -t set

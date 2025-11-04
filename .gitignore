@@ -12,3 +12,5 @@ deps/*/Makefile
 *fkvs
 .idea
 build.log
+compile_commands.json
+!Makefile.fkvs
