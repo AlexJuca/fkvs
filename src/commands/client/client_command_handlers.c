@@ -228,7 +228,7 @@ void execute_command_benchmark(const char *cmd, client_t *client,
              * and use them here so we don't spend too much of our benchmarking
              * time generating and formatting uuid keys as strings
              */
-            char key[32];
+            char key[KEY_LEN];
             generate_unique_key(key);
 
             binary_cmd = construct_set_command(key, "world", &cmd_len);
