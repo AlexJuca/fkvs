@@ -49,7 +49,7 @@ sudo apt install cmake
 
 cd deps/linenoise
 git submodule init
-git module update
+git submodule update
 cd ../../
 cmake .
 cmake --build .
@@ -63,7 +63,7 @@ brew install cmake
 
 cd deps/linenoise
 git submodule init
-git module update
+git submodule update
 cd ../../
 
 cmake .
