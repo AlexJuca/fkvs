@@ -167,10 +167,6 @@ void cmd_info(const command_args_t args, void (*response_cb)(client_t *client))
     }
     send(args.client->fd, info_cmd, cmd_len, 0);
     free(info_cmd);
-
-    if (args.client->verbose) {
-      printf("INFO command sent. Awaiting metrics...\n");
-    }
     response_cb(args.client);
 }
 void cmd_decr(const command_args_t args, void (*response_cb)(client_t *client))

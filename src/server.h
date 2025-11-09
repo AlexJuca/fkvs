@@ -26,7 +26,7 @@ typedef struct server_t {
     bool show_logo;
     list_t *clients;
     u_int32_t num_clients;
-    u_int32_t num_disconnected_clients;
+    int32_t num_disconnected_clients;
     int event_loop_max_events;
     char *uds_socket_path; // Unix domain socket path
     enum socket_domain socket_domain;

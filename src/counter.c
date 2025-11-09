@@ -13,8 +13,6 @@ counter_t *init_counter()
     if (!counter)
         return NULL;
     counter->memory_usage = 0;
-    counter->hit_rate = 0.0;
-    counter->hits = 0;
     counter->num_executed_commands = 0;
     counter->start_time = time(NULL);
     return counter;
@@ -30,19 +28,10 @@ void update_memory_usage(counter_t *counter)
     counter->memory_usage = get_memory_usage();
 }
 
-void update_hit_rate(counter_t *counter, const double hit_rate)
-{
-    counter->hit_rate = hit_rate;
-}
 
 void increment_command_count(counter_t *counter)
 {
     counter->num_executed_commands++;
-}
-
-void increment_hits(counter_t *counter)
-{
-    counter->hits++;
 }
 
 void update_disconnected_clients(counter_t *counter,

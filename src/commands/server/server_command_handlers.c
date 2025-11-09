@@ -318,8 +318,6 @@ void handle_info_command(int client_fd, unsigned char *buffer,
         "\n"
         "#Stats \n"
         "commands executed: %lu \n"
-        "Hit Rate: %.2f%%\n"
-        "Hits: %lu\n"
         "\n"
         "# Memory \n"
         "Memory Usage: %lu bytes (%lu KiB)\n"
@@ -328,8 +326,7 @@ void handle_info_command(int client_fd, unsigned char *buffer,
         server.event_loop_max_events,
         event_loop_dispatcher_kind_to_string(server.event_dispatcher_kind),
         server.num_clients, server.metrics.disconnected_clients,
-        server.metrics.num_executed_commands, server.metrics.hit_rate * 100,
-        server.metrics.hits, server.metrics.memory_usage,
+        server.metrics.num_executed_commands, server.metrics.memory_usage,
         server.metrics.memory_usage / 1024);
     if (n < 0 || n >= sizeof(metrics)) {
         fprintf(stderr, "Formatting error or buffer overflow while preparing "
