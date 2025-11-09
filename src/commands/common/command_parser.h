@@ -18,6 +18,8 @@ unsigned char *construct_incr_by_command(const char *key, const char *value,
 
 unsigned char *construct_ping_command(const char *value, size_t *command_len);
 
+unsigned char *construct_info_command(size_t *command_len);
+
 unsigned char *construct_decr_command(const char *key, size_t *command_len);
 
 #endif // COMMAND_PARSER_H

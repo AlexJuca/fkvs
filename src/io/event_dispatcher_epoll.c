@@ -1,11 +1,11 @@
 #ifdef __linux__
 #include "../client.h"
-#include "../networking/modes.h"
-#include "event_dispatcher.h"
 #include "../core/list.h"
+#include "../networking/modes.h"
 #include "../networking/networking.h"
 #include "../server.h"
 #include "../utils.h"
+#include "event_dispatcher.h"
 
 #include <arpa/inet.h>
 #include <errno.h>
@@ -38,10 +38,13 @@ static void close_and_drop_client(const int epfd, client_t *c)
     if (node) {
         listDeleteNode(server.clients, node);
         free(node->val); // free(client_t) allocated for list storage if any
-        server.num_clients -= 1;
     }
 
     close(c->fd);
+    server.num_clients -= 1;
+    server.num_disconnected_clients += 1;
+    update_disconnected_clients(&server.metrics,
+                                server.num_disconnected_clients);
     free(c);
 }
 
@@ -49,6 +52,7 @@ int run_event_loop()
 {
 
     set_nonblocking(server.fd);
+    server.event_dispatcher_kind = epoll_kind;
 
     const int epfd = epoll_create1(0);
     if (epfd == -1) {
@@ -66,10 +70,11 @@ int run_event_loop()
         return -1;
     }
 
-    struct epoll_event events[MAX_EVENTS];
+    struct epoll_event events[server.event_loop_max_events];
 
     for (;;) {
-        const int n = epoll_wait(epfd, events, MAX_EVENTS, -1);
+        const int n =
+            epoll_wait(epfd, events, server.event_loop_max_events, -1);
         if (n < 0) {
             if (errno == EINTR)
                 continue;

@@ -1,6 +1,8 @@
 #include "hashtable.h"
+#include <limits.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/time.h>
 
 // DJB2 hash function
 size_t hash_function(unsigned char *key, size_t key_len, size_t table_size)

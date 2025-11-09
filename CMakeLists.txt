@@ -11,13 +11,13 @@ set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
 if(APPLE)
-  add_executable(fkvs-server src/client.c src/core/list.c src/config.c src/networking/networking.c src/server.c src/core/hashtable.c src/commands/common/command_registry.c src/commands/server/server_command_handlers.c src/io/event_dispatcher_kqueue.c)
+  add_executable(fkvs-server src/memory.c src/counter.c src/client.c src/core/list.c src/config.c src/networking/networking.c src/server.c src/core/hashtable.c src/commands/common/command_registry.c src/commands/server/server_command_handlers.c src/io/event_dispatcher_kqueue.c)
   target_compile_definitions(fkvs-server PRIVATE SERVER)
 
   add_executable(fkvs-benchmark src/fkvs-benchmark.c src/client.c src/core/list.c src/networking/networking.c src/commands/common/command_parser.c src/commands/client/client_command_handlers.c)
   target_compile_definitions(fkvs-benchmark PRIVATE CLI)
 elseif(LINUX)
-  add_executable(fkvs-server src/client.c src/core/list.c src/config.c src/networking/networking.c src/server.c src/core/hashtable.c src/commands/common/command_registry.c src/commands/server/server_command_handlers.c src/io/event_dispatcher_epoll.c)
+  add_executable(fkvs-server src/memory.c src/counter.c src/client.c src/core/list.c src/config.c src/networking/networking.c src/server.c src/core/hashtable.c src/commands/common/command_registry.c src/commands/server/server_command_handlers.c src/io/event_dispatcher_epoll.c)
   target_compile_definitions(fkvs-server PRIVATE SERVER)
 
   add_executable(fkvs-benchmark src/fkvs-benchmark.c src/client.c src/core/list.c src/networking/networking.c src/commands/common/command_parser.c src/commands/client/client_command_handlers.c)

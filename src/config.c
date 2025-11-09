@@ -1,7 +1,9 @@
 #include "config.h"
 #include "client.h"
+#include "io/event_dispatcher.h"
 #include "networking/networking.h"
 #include "utils.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -19,6 +21,11 @@ server_t load_server_config(const char *path)
     server.num_clients = 0;
     server.uds_socket_path = NULL;
     server.socket_domain = TCP_IP;
+    if (path) {
+        server.config_file_path = path;
+    } else {
+        server.config_file_path = DEFAULT_CLIENT_CONFIG_FILE_PATH;
+    }
 
     char line[1024];
 
@@ -33,6 +40,12 @@ server_t load_server_config(const char *path)
 
         if (strcmp(key, "port") == 0) {
             server.port = atoi(value);
+        }
+
+        if (strcmp(key, "event-loop-max-events") == 0) {
+            server.event_loop_max_events = atoi(value);
+        } else {
+            server.event_loop_max_events = MAX_EVENTS;
         }
 
         if (strcmp(key, "unixsocket") == 0) {

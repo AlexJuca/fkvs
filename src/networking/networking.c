@@ -15,6 +15,7 @@
 #ifdef SERVER
 
 #include "../commands/common/command_registry.h"
+#include "../counter.h"
 
 int start_server()
 {
@@ -142,6 +143,7 @@ void try_process_frames(client_t *c)
 
         // Dispatch exactly one frame.
         dispatch_command(c->fd, c->buffer, frame_len);
+        increment_command_count(&server.metrics);
 
         // Shift any remaining bytes (back-to-back frames).
         size_t remain = c->buf_used - frame_len;

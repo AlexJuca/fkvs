@@ -155,6 +155,18 @@ static char *add_strings(const char *a, const char *b)
     return cleaned;
 }
 
+static void format_uptime(const counter_t *counter, char *buffer,
+                          size_t buffer_len)
+{
+    const time_t uptime_seconds = time(NULL) - counter->start_time;
+    const int days = uptime_seconds / 86400;
+    const int hours = (uptime_seconds % 86400) / 3600;
+    const int minutes = (uptime_seconds % 3600) / 60;
+    const int seconds = uptime_seconds % 60;
+    snprintf(buffer, buffer_len, "%d days, %d hours, %d min, %d sec", days,
+             hours, minutes, seconds);
+}
+
 #endif
 
 #define LOG_INFO(ctx) _log(ctx)

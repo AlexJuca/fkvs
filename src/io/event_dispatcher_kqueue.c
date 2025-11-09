@@ -38,16 +38,20 @@ static void close_and_drop_client(const int kq, client_t *c)
     if (node) {
         listDeleteNode(server.clients, node);
         free(node->val); // free(client_t)
-        server.num_clients -= 1;
     }
 
     close(c->fd);
+    server.num_clients -= 1;
+    server.num_disconnected_clients += 1;
+    update_disconnected_clients(&server.metrics,
+                                server.num_disconnected_clients);
     free(c);
 }
 
 int run_event_loop()
 {
     set_nonblocking(server.fd);
+    server.event_dispatcher_kind = kqueue_kind;
 
     const int kq = kqueue();
     if (kq == -1) {
@@ -64,10 +68,11 @@ int run_event_loop()
         return -1;
     }
 
-    struct kevent evs[MAX_EVENTS];
+    struct kevent evs[server.event_loop_max_events];
 
     for (;;) {
-        const int n = kevent(kq, NULL, 0, evs, MAX_EVENTS, NULL);
+        const int n =
+            kevent(kq, NULL, 0, evs, server.event_loop_max_events, NULL);
         if (n < 0) {
             if (errno == EINTR)
                 continue;
