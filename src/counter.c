@@ -28,7 +28,6 @@ void update_memory_usage(counter_t *counter)
     counter->memory_usage = get_memory_usage();
 }
 
-
 void increment_command_count(counter_t *counter)
 {
     counter->num_executed_commands++;
