@@ -3,6 +3,24 @@
 
 #define MAX_EVENTS 100000
 
+typedef enum event_loop_dispatcher_kind {
+    kqueue_kind,
+    epoll_kind
+} event_loop_dispatcher_kind;
+
+static char *
+event_loop_dispatcher_kind_to_string(const event_loop_dispatcher_kind kind)
+{
+    switch (kind) {
+    case kqueue_kind:
+        return "kqueue";
+    case epoll_kind:
+        return "epoll";
+    default:
+        return "(unknown)";
+    }
+}
+
 // Defines the interface for platform-specific event loops
 int run_event_loop();
 

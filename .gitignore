@@ -14,3 +14,7 @@ deps/*/Makefile
 build.log
 compile_commands.json
 !Makefile.fkvs
+test_*
+!tests/*test_*
+Testing/
+CTestTestfile.cmake

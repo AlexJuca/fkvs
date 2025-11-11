@@ -19,13 +19,13 @@ typedef struct client_t {
     char *ip_address;
     int port;
     char *uds_socket_path; // Unix domain socket path
-    enum SocketDomain
+    enum socket_domain
         socket_domain; // The socket domain we are using (Unix Domain or TCP/IP)
     bool benchmark_mode;
     bool verbose; // print additional information during runtime
 } client_t;
 
 client_t *init_client(int client_fd, struct sockaddr_storage ss,
-                      enum SocketDomain socket_domain);
+                      enum socket_domain socket_domain);
 
 #endif // CLIENT_H

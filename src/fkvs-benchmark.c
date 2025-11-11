@@ -26,7 +26,7 @@ typedef struct {
     int port;
     bool verbose;
     char *command_type;
-    enum SocketDomain socket_domain;
+    enum socket_domain socket_domain;
     bool use_random_keys;
 } benchmark_config_t;
 

@@ -34,6 +34,8 @@ void cmd_incr_by(command_args_t args, void (*response_cb)(client_t *client));
 
 void cmd_ping(command_args_t args, void (*response_cb)(client_t *client));
 
+void cmd_info(command_args_t args, void (*response_cb)(client_t *client));
+
 void cmd_unknown(command_args_t args, void (*response_cb)(client_t *client));
 
 void command_response_handler(client_t *client);

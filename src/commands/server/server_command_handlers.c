@@ -20,6 +20,7 @@ void init_command_handlers(hashtable_t *ht)
     register_command(CMD_INCR_BY, handle_incr_by_command);
     register_command(CMD_PING, handle_ping_command);
     register_command(CMD_DECR, handle_decr_command);
+    register_command(CMD_INFO, handle_info_command);
 }
 
 void handle_set_command(int client_fd, unsigned char *buffer, size_t bytes_read)
@@ -289,6 +290,50 @@ void handle_ping_command(int client_fd, unsigned char *buffer,
         fprintf(stderr, "Incomplete command data for PING.\n");
         send_error(client_fd);
     }
+}
+
+void handle_info_command(int client_fd, unsigned char *buffer,
+                         size_t bytes_read)
+{
+    if (server.verbose) {
+        printf("INFO command received. Gathering and returning metrics...\n");
+    }
+    char formatted_uptime[50];
+    update_memory_usage(&server.metrics);
+    format_uptime(&server.metrics, formatted_uptime, sizeof(formatted_uptime));
+    char metrics[512];
+    int n = snprintf(
+        metrics, sizeof(metrics),
+        "# Server \n"
+        "pid: %d \n"
+        "port: %d \n"
+        "config file: %s \n"
+        "Uptime: %s \n"
+        "event_loop_max_events: %d \n"
+        "event_dispatcher_kind: %s \n"
+        "\n"
+        "# Clients \n"
+        "connected clients: %d \n"
+        "disconnected clients: %lu \n"
+        "\n"
+        "#Stats \n"
+        "commands executed: %lu \n"
+        "\n"
+        "# Memory \n"
+        "Memory Usage: %lu bytes (%lu KiB)\n"
+        "\n",
+        server.pid, server.port, server.config_file_path, formatted_uptime,
+        server.event_loop_max_events,
+        event_loop_dispatcher_kind_to_string(server.event_dispatcher_kind),
+        server.num_clients, server.metrics.disconnected_clients,
+        server.metrics.num_executed_commands, server.metrics.memory_usage,
+        server.metrics.memory_usage / 1024);
+    if (n < 0 || n >= sizeof(metrics)) {
+        fprintf(stderr, "Formatting error or buffer overflow while preparing "
+                        "metrics reply.\n");
+        return;
+    }
+    send_reply(client_fd, metrics, n);
 }
 
 void handle_decr_command(int client_fd, unsigned char *buffer,

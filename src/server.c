@@ -2,6 +2,7 @@
 #include "config.h"
 #include "core/hashtable.h"
 #include "core/list.h"
+#include "counter.h"
 #include "io/event_dispatcher.h"
 #include "networking/networking.h"
 #include "utils.h"
@@ -19,8 +20,6 @@
 
 /* Global Server instance */
 server_t server;
-
-int EPOLL_KQQUEUE_FD = -1;
 
 void show_logo()
 {
@@ -108,7 +107,7 @@ void handle_sigint(int sig)
     free(server.database);
 
     close(server.fd);
-    close(EPOLL_KQQUEUE_FD);
+    close(server.event_loop_fd);
     exit(EXIT_SUCCESS);
 }
 
@@ -133,6 +132,7 @@ int main(int argc, char *argv[])
 
     server = load_server_config(config_path);
     server.pid = getpid();
+    server.metrics = *init_counter();
 
     for (int i = 0; i < argc; i++) {
         if (strcmp("-h", argv[i]) == 0 || strcmp("--help", argv[i]) == 0) {
@@ -190,7 +190,7 @@ int main(int argc, char *argv[])
 
     init_command_handlers(server.database->store);
 
-    EPOLL_KQQUEUE_FD = run_event_loop();
+    server.event_loop_fd = run_event_loop();
 
     return 0;
 }

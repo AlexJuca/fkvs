@@ -23,4 +23,7 @@ void handle_ping_command(int client_fd, unsigned char *buffer,
 void handle_decr_command(int client_fd, unsigned char *buffer,
                          size_t bytes_read);
 
+void handle_info_command(int client_fd, unsigned char *buffer,
+                         size_t bytes_read);
+
 #endif // SERVER_COMMAND_HANDLERS_H

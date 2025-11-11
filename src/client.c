@@ -5,7 +5,7 @@
 #include <sys/fcntl.h>
 
 client_t *init_client(const int client_fd, const struct sockaddr_storage ss,
-                      const enum SocketDomain socket_domain)
+                      const enum socket_domain socket_domain)
 {
     client_t *client = calloc(1, sizeof(*client));
     if (!client) {

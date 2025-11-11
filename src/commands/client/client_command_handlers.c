@@ -153,6 +153,22 @@ void cmd_ping(const command_args_t args, void (*response_cb)(client_t *client))
     response_cb(args.client);
 }
 
+void cmd_info(const command_args_t args, void (*response_cb)(client_t *client))
+{
+    if (strncmp(args.cmd, "INFO", 4) != 0) {
+        return;
+    }
+
+    size_t cmd_len;
+    unsigned char *info_cmd = construct_info_command(&cmd_len);
+    if (!info_cmd) {
+        fprintf(stderr, "Failed to construct INFO command\n");
+        return;
+    }
+    send(args.client->fd, info_cmd, cmd_len, 0);
+    free(info_cmd);
+    response_cb(args.client);
+}
 void cmd_decr(const command_args_t args, void (*response_cb)(client_t *client))
 {
     if (strncmp(args.cmd, "DECR ", 4) != 0) {
@@ -190,7 +206,7 @@ void cmd_unknown(const command_args_t args,
 {
     if (strncmp(args.cmd, "INCR ", 5) && strncmp(args.cmd, "INCRBY ", 6) &&
         strncmp(args.cmd, "GET ", 4) && strncmp(args.cmd, "SET ", 4) &&
-        strncmp(args.cmd, "PING ", 5) && strncmp(args.cmd, "DECR ", 5)) {
+        strncmp(args.cmd, "PING ", 5) && strncmp(args.cmd, "DECR ", 5) && strncmp(args.cmd, "INFO", 5)) {
         printf("Unknown command \n");
     }
 }
@@ -199,7 +215,8 @@ const cmd_t command_table[] = {
     {"cmd_set", cmd_set},         {"cmd_get", cmd_get},
     {"cmd_decr", cmd_decr},       {"cmd_incr", cmd_incr},
     {"cmd_incr_by", cmd_incr_by}, {"cmd_ping", cmd_ping},
-    {"cmd_unknown", cmd_unknown}};
+    {"cmd_unknown", cmd_unknown},
+    {"cmd_info", cmd_info}};
 
 void execute_command(const char *cmd, client_t *client,
                      void (*response_cb)(client_t *client))
@@ -257,7 +274,19 @@ void command_response_handler(client_t *client)
             const uint16_t core_len =
                 ((uint16_t)client->buffer[0] << 8) | client->buffer[1];
             if (bytes_received > core_len) {
-                if (client->buffer[2] == CMD_PING) {
+                if (client->buffer[2] == CMD_INFO) {
+                        const size_t value_len = client->buffer[0] << 8 | client->buffer[1];
+                        char *data = malloc(value_len + 1);
+                        if (data) {
+                            memcpy(data, &client->buffer[5], value_len);
+                            data[value_len] = '\0';
+                            printf("%s\n", data);
+                            free(data);
+                        } else {
+                            printf("Memory allocation failed\n");
+                        }
+
+                    } else if (client->buffer[2] == CMD_PING) {
                     const size_t value_len =
                         client->buffer[3] << 8 | client->buffer[4];
                     if ((int)value_len ==
