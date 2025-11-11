@@ -92,6 +92,16 @@ server_t load_server_config(const char *path)
                 }
             }
         }
+
+        if (strcmp(key, "use-io-uring") == 0) {
+            if (strcmp(value, "true") == 0) {
+                server.use_io_uring = true;
+            } else if (strcmp(value, "false") == 0) {
+                server.use_io_uring = false;
+            } else {
+                ERROR_AND_EXIT("'use-io-uring' expects a truthy value.");
+            }
+        }
     }
 
     fclose(config);
@@ -114,6 +124,7 @@ client_t load_client_config(const char *path)
     client.benchmark_mode = false;
     client.uds_socket_path = NULL;
     client.socket_domain = TCP_IP;
+    client.interactive_mode = true;
     if (client.socket_domain == TCP_IP) {
         client.ip_address = "127.0.0.1";
     }

@@ -190,6 +190,22 @@ int main(int argc, char *argv[])
 
     init_command_handlers(server.database->store);
 
+#ifdef __linux__
+    if (server.use_io_uring) {
+        server.event_dispatcher_kind = io_uring_kind;
+        LOG_INFO("event-loop-kind: io_uring");
+    } else {
+        server.event_dispatcher_kind = epoll_kind;
+        LOG_INFO("event-loop-kind: epoll");
+    }
+#elif defined(__APPLE__)
+    server.event_dispatcher_kind = kqueue_kind;
+    LOG_INFO("event-loop-kind: kqueue");
+#else
+#error                                                                         \
+    "Platform not supported: io_uring currently supports only Linux and macOS uses kqueue."
+#endif
+
     server.event_loop_fd = run_event_loop();
 
     return 0;

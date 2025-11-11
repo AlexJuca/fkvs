@@ -50,9 +50,7 @@ static void close_and_drop_client(const int epfd, client_t *c)
 
 int run_event_loop()
 {
-
     set_nonblocking(server.fd);
-    server.event_dispatcher_kind = epoll_kind;
 
     const int epfd = epoll_create1(0);
     if (epfd == -1) {

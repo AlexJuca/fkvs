@@ -124,7 +124,7 @@ void cmd_incr_by(const command_args_t args,
 
 void cmd_ping(const command_args_t args, void (*response_cb)(client_t *client))
 {
-    if (strncmp(args.cmd, "PING ", 5) != 0) {
+    if (strncmp(args.cmd, "PING ", 5) != 0 && strncmp(args.cmd, "PING", 4) != 0) {
         return;
     }
 
@@ -132,8 +132,13 @@ void cmd_ping(const command_args_t args, void (*response_cb)(client_t *client))
     char value[VALUE_LEN];
     if (sscanf(args.cmd, "PING \"%127[^\"]\"s", value) == 1) {
 
-    } else if (sscanf(args.cmd, "PING") == 1) {
-
+    } else if (strcmp(args.cmd, "PING") == 0) {
+      // TODO: Find a cleaner alternative for this.
+      value[0] = 'P';
+      value[1] = 'O';
+      value[2] = 'N';
+      value[3] = 'G';
+      value[4] = '\0';
     } else if (sscanf(args.cmd, "PING %127s", value) == 1) {
 
     } else {
@@ -206,7 +211,8 @@ void cmd_unknown(const command_args_t args,
 {
     if (strncmp(args.cmd, "INCR ", 5) && strncmp(args.cmd, "INCRBY ", 6) &&
         strncmp(args.cmd, "GET ", 4) && strncmp(args.cmd, "SET ", 4) &&
-        strncmp(args.cmd, "PING ", 5) && strncmp(args.cmd, "DECR ", 5) && strncmp(args.cmd, "INFO", 5)) {
+        strncmp(args.cmd, "PING ", 5) && strncmp(args.cmd, "PING", 4)
+        && strncmp(args.cmd, "DECR ", 5) && strncmp(args.cmd, "INFO", 5)) {
         printf("Unknown command \n");
     }
 }
@@ -258,7 +264,6 @@ void execute_command_benchmark(const char *cmd, client_t *client,
         response_cb(args.client);
     } else if (!strcasecmp(cmd, "ping")) {
         unsigned char *binary_cmd = construct_ping_command("", &cmd_len);
-
         send(args.client->fd, binary_cmd, cmd_len, 0);
         free(binary_cmd);
         response_cb(args.client);

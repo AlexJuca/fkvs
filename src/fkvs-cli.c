@@ -8,6 +8,18 @@
 #include <stdlib.h>
 #include <string.h>
 
+static void print_usage_and_exit(const char *prog)
+{
+    fprintf(stderr,
+            "Usage: %s [-c command] [-h host] [-p port] "
+            "  -c C     Command to execute (default ping)\n"
+            "  -h HOST  server host/IP (default 127.0.0.1)\n"
+            "  -p PORT  server port (default 5995)\n"
+            " --non-interactive start client in non-repl mode\n",
+            prog);
+    exit(1);
+}
+
 void run_repl(client_t client)
 {
     char cli_prompt[64];
@@ -56,6 +68,26 @@ int main(int argc, char *argv[])
     client_t client = load_client_config(NULL);
     int client_fd;
 
+    for (int i = 1; i < argc; ++i) {
+        if (strcasecmp(argv[i], "--h") == 0 ||
+            strcasecmp(argv[i], "--help") == 0) {
+            print_usage_and_exit(argv[0]);
+        } else if (strcmp(argv[i], "--non-interactive") == 0) {
+            client.interactive_mode = false;
+            client.command_type = "PING";
+        } else if (strcmp(argv[i], "-h") == 0 && i + 1 < argc) {
+            client.ip_address = argv[++i];
+        } else if (strcmp(argv[i], "-p") == 0 && i + 1 < argc) {
+            client.port = atoi(argv[++i]);
+        } else if (strcmp(argv[i], "-u") == 0) {
+            client.socket_domain = UNIX;
+        } else if (strcmp(argv[i], "-c") == 0 && i + 1 < argc) {
+            if (strcmp(argv[i + 1], "ping") == 0) {
+                client.command_type = "PING";
+            }
+        }
+    }
+
     if (client.socket_domain == UNIX) {
         client_fd = start_uds_client(&client);
     } else {
@@ -67,6 +99,10 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    run_repl(client);
+    if (client.interactive_mode) {
+        run_repl(client);
+    } else {
+        execute_command(client.command_type, &client, command_response_handler);
+    }
     close(client.fd);
 }

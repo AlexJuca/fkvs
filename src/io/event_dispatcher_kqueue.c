@@ -51,7 +51,6 @@ static void close_and_drop_client(const int kq, client_t *c)
 int run_event_loop()
 {
     set_nonblocking(server.fd);
-    server.event_dispatcher_kind = kqueue_kind;
 
     const int kq = kqueue();
     if (kq == -1) {

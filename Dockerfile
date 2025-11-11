@@ -36,11 +36,12 @@ COPY --from=builder /src/logo.txt /usr/local/bin/logo.txt
 COPY --from=builder /src/server.conf /home/fkvs/server.conf
 COPY --from=builder /src/client.conf /home/fkvs/client.conf
 COPY --from=builder /src/build/fkvs-server /usr/local/bin/fkvs-server
+COPY --from=builder /src/build/fkvs-benchmark /usr/local/bin/fkvs-benchmark
 COPY --from=builder /src/build/fkvs-cli    /usr/local/bin/fkvs-cli
 
 EXPOSE 5995
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-  CMD nc -z 127.0.0.1 5995 || exit 1
+    CMD /usr/local/bin/fkvs-cli -h 127.0.0.1 -p 5995 --non-interactive | grep 'PONG' || exit 1
 
 USER fkvs
 WORKDIR /app
