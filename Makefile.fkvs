@@ -1,6 +1,6 @@
 # Custom Makefile to setup and build fkvs
 
-.PHONY: setup build setup-and-build
+.PHONY: setup build setup-and-build tests
 
 setup:
 	cd deps/linenoise && git submodule init && git submodule update && cd ../../
@@ -9,3 +9,6 @@ build:
 	cmake . && cmake --build .
 
 setup-and-build: setup build
+
+tests: setup-and-build
+	ctest --output-on-failure
