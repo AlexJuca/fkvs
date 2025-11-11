@@ -185,7 +185,7 @@ int start_client(client_t *client)
         return -1;
     }
 
-    if (client->verbose) {
+    if (client->verbose && client->interactive_mode) {
         printf("Connected to server %s on port %d\n", client->ip_address,
                client->port);
     }
@@ -215,7 +215,7 @@ int start_uds_client(client_t *client)
         return -1;
     }
 
-    if (client->verbose) {
+    if (client->verbose && client->interactive_mode) {
         printf("Connected to server via unix domain socket \n");
     }
     return client_fd;
