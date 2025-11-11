@@ -15,6 +15,7 @@ static void print_usage_and_exit(const char *prog)
             "  -c C     Command to execute (default ping)\n"
             "  -h HOST  server host/IP (default 127.0.0.1)\n"
             "  -p PORT  server port (default 5995)\n"
+            "  -d path to config file \n"
             " --non-interactive start client in non-repl mode\n",
             prog);
     exit(1);
@@ -65,7 +66,15 @@ void run_repl(client_t client)
 
 int main(int argc, char *argv[])
 {
-    client_t client = load_client_config(NULL);
+    char *config_path = DEFAULT_CLIENT_CONFIG_FILE_PATH;
+
+    for (int i = 1; i < argc; i++) {
+        if (strcmp("-d", argv[i]) == 0) {
+            config_path = argv[i + 1];
+        }
+    }
+
+    client_t client = load_client_config(config_path);
     int client_fd;
 
     for (int i = 1; i < argc; ++i) {

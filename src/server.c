@@ -95,13 +95,6 @@ void handle_sigint(int sig)
     listEmpty(server.clients);
     server.num_clients = 0;
 
-    // Cleanup server
-    if (server.socket_domain == UNIX) {
-        if (server.verbose) {
-            LOG_INFO("failed to unlink socket path");
-        }
-    }
-
     free(server.database->expires);
     free(server.database->store);
     free(server.database);
@@ -168,15 +161,9 @@ int main(int argc, char *argv[])
     signal(SIGINT, handle_sigint);
 
     if (server.socket_domain == UNIX) {
-        if (unlink(FKVS_SOCK_PATH) == -1) {
-            if (server.verbose) {
-                LOG_INFO("failed to unlink socket path");
-            }
-        }
-
-        start_uds_server();
+        server.fd = start_uds_server();
     } else {
-        start_server();
+        server.fd = start_server();
     }
 
     if (server.fd == -1) {

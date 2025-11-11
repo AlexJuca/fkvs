@@ -27,7 +27,15 @@ principles.
 ```shell
 docker build -t fkvs:latest -f Dockerfile .  
 
-docker run --rm -it -p 5995:5995 fkvs:latest
+docker run --rm -it --name fkvs -p 5995:5995 fkvs:latest # if you intend to connecting from host via tcp
+docker run --rm -it --name fkvs fkvs:latest
+
+## Connect to server using 127.0.0.1 and port 5995
+docker exec -it fkvs /usr/local/bin/fkvs-cli -h 127.0.0.1 -p 5995 -d /home/fkvs/client.conf
+
+## Additional commands for running benchmarks from within the container
+docker exec -it fkvs /usr/local/bin/fkvs-benchmark -n 1000000 -t set -c 30 -u # run benchmark using unix domain sockets
+docker exec -it fkvs /usr/local/bin/fkvs-benchmark -n 1000000 -t set -c 30 # run benchmark using tcp
 ```
 
 ## Build fkvs from source

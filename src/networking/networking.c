@@ -16,6 +16,9 @@
 
 #include "../commands/common/command_registry.h"
 #include "../counter.h"
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <errno.h>
 
 int start_server()
 {
@@ -68,18 +71,28 @@ int start_uds_server()
     }
 
     server.fd = server_fd;
+    server.uds_socket_path = FKVS_SOCK_PATH;
 
     memset(&server_addr, 0, sizeof(struct sockaddr_un));
     server_addr.sun_family = AF_UNIX;
-    strncpy(server_addr.sun_path, FKVS_SOCK_PATH,
+    strncpy(server_addr.sun_path, server.uds_socket_path,
             sizeof(server_addr.sun_path) - 1);
-    unlink(server.uds_socket_path);
+
+    if (unlink(server.uds_socket_path) == -1 && errno != ENOENT) {
+        LOG_INFO("failed to unlink socket path during server start up");
+    }
 
     if (bind(server_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) <
         0) {
         perror("bind failed");
         close(server_fd);
         return -1;
+    }
+
+    if (chmod(server.uds_socket_path, 0777) == -1) {
+      perror("Failed to set permissions on Unix socket");
+      close(server_fd);
+      return -1;
     }
 
     if (listen(server_fd, BACKLOG) < 0) {

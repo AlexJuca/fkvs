@@ -128,6 +128,11 @@ client_t load_client_config(const char *path)
     if (client.socket_domain == TCP_IP) {
         client.ip_address = "127.0.0.1";
     }
+    if (path) {
+        client.config_file_path = path;
+    } else {
+        client.config_file_path = DEFAULT_CLIENT_CONFIG_FILE_PATH;
+    }
 
     char line[1024];
 

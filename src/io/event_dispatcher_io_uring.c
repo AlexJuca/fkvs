@@ -14,6 +14,7 @@
 #include <unistd.h>
 
 #define QUEUE_DEPTH 256
+#define BATCH_SUBMIT_THRESHOLD 32
 
 static void close_and_drop_client(struct io_uring *ring, client_t *c)
 {
@@ -47,6 +48,8 @@ int run_event_loop()
         fprintf(stderr, "Unable to setup io_uring: %s\n", strerror(-res));
         return -1;
     }
+
+    unsigned int sqe_count = 0;
 
     for (;;) {
         struct io_uring_cqe *cqe;
@@ -103,7 +106,13 @@ int run_event_loop()
                 struct io_uring_sqe *sqe = io_uring_get_sqe(&ring);
                 io_uring_prep_recv(sqe, new_client->fd, new_client->buffer, sizeof(new_client->buffer), 0);
                 io_uring_sqe_set_data(sqe, new_client);
-                io_uring_submit(&ring);
+                sqe_count++;
+
+                // Check if batch submission threshold is met
+                if (sqe_count >= BATCH_SUBMIT_THRESHOLD) {
+                    io_uring_submit(&ring);
+                    sqe_count = 0;
+                }
             }
         } else {
             // Data read for existing connections.
@@ -124,11 +133,22 @@ int run_event_loop()
                 struct io_uring_sqe *sqe = io_uring_get_sqe(&ring);
                 io_uring_prep_recv(sqe, c->fd, c->buffer + c->buf_used, sizeof(c->buffer) - c->buf_used, 0);
                 io_uring_sqe_set_data(sqe, c);
-                io_uring_submit(&ring);
+                sqe_count++;
+
+                // Check if batch submission threshold is met
+                if (sqe_count >= BATCH_SUBMIT_THRESHOLD) {
+                    io_uring_submit(&ring);
+                    sqe_count = 0;
+                }
             }
         }
 
         io_uring_cqe_seen(&ring, cqe);
+    }
+
+    // Ensure any remaining SQEs are submitted
+    if (sqe_count > 0) {
+        io_uring_submit(&ring);
     }
 
     io_uring_queue_exit(&ring);
