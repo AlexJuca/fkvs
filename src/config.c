@@ -24,7 +24,7 @@ server_t load_server_config(const char *path)
     if (path) {
         server.config_file_path = path;
     } else {
-        server.config_file_path = DEFAULT_CLIENT_CONFIG_FILE_PATH;
+        server.config_file_path = DEFAULT_SERVER_CONFIG_FILE_PATH;
     }
 
     char line[1024];
