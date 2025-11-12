@@ -4,6 +4,8 @@
 #include "../../utils.h"
 #include "../common/command_defs.h"
 #include "../common/command_registry.h"
+
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/errno.h>
@@ -134,10 +136,12 @@ void handle_get_command(int client_fd, unsigned char *buffer, size_t bytes_read)
             }
 
             memcpy(resp_buffer, value->ptr, value_len);
+
+            assert(resp_buffer != NULL);
+            assert(client_fd != -1);
+
             resp_buffer[value_len] = '\0';
-            printf("Returning: %s \n", (const char *)resp_buffer);
             send_reply(client_fd, resp_buffer, value_len);
-            free(resp_buffer);
         } else {
             send_error(client_fd);
         }
@@ -152,6 +156,9 @@ void handle_incr_command(int client_fd, unsigned char *buffer,
 {
     const size_t command_len = (buffer[0] << 8) | buffer[1];
     const size_t key_len = (buffer[3] << 8) | buffer[4];
+
+    assert(key_len >= 1);
+    assert(command_len >= 1);
 
     if (bytes_read - 2 != command_len) {
         fprintf(stderr, "Incomplete command data for INCR.\n");
@@ -176,6 +183,7 @@ void handle_incr_command(int client_fd, unsigned char *buffer,
 
     const uint64_t current = strtoull(value->ptr, NULL, 10);
     const uint64_t sum = current + 1;
+    assert(sum == current + 1);
 
     if (server.verbose) {
         printf("Value incremented to %llu\n", sum);

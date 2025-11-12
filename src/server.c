@@ -95,13 +95,6 @@ void handle_sigint(int sig)
     listEmpty(server.clients);
     server.num_clients = 0;
 
-    // Cleanup server
-    if (server.socket_domain == UNIX) {
-        if (server.verbose) {
-            LOG_INFO("failed to unlink socket path");
-        }
-    }
-
     free(server.database->expires);
     free(server.database->store);
     free(server.database);
@@ -168,15 +161,9 @@ int main(int argc, char *argv[])
     signal(SIGINT, handle_sigint);
 
     if (server.socket_domain == UNIX) {
-        if (unlink(FKVS_SOCK_PATH) == -1) {
-            if (server.verbose) {
-                LOG_INFO("failed to unlink socket path");
-            }
-        }
-
-        start_uds_server();
+        server.fd = start_uds_server();
     } else {
-        start_server();
+        server.fd = start_server();
     }
 
     if (server.fd == -1) {
@@ -189,6 +176,22 @@ int main(int argc, char *argv[])
     server.database->expires = create_hash_table(TABLE_SIZE);
 
     init_command_handlers(server.database->store);
+
+#ifdef __linux__
+    if (server.use_io_uring) {
+        server.event_dispatcher_kind = io_uring_kind;
+        LOG_INFO("event-loop-kind: io_uring");
+    } else {
+        server.event_dispatcher_kind = epoll_kind;
+        LOG_INFO("event-loop-kind: epoll");
+    }
+#elif defined(__APPLE__)
+    server.event_dispatcher_kind = kqueue_kind;
+    LOG_INFO("event-loop-kind: kqueue");
+#else
+#error                                                                         \
+    "Platform not supported: io_uring currently supports only Linux and macOS uses kqueue."
+#endif
 
     server.event_loop_fd = run_event_loop();
 

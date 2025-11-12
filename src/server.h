@@ -30,10 +30,11 @@ typedef struct server_t {
     int event_loop_max_events;
     char *uds_socket_path; // Unix domain socket path
     enum socket_domain socket_domain;
+    bool use_io_uring;
     char *config_file_path;
     db_t *database;
     counter_t metrics;
-    enum event_loop_dispatcher_kind event_dispatcher_kind;
+    event_loop_dispatcher_kind event_dispatcher_kind;
 } server_t;
 
 #endif // SERVER_H

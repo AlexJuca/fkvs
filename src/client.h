@@ -22,6 +22,9 @@ typedef struct client_t {
     enum socket_domain
         socket_domain; // The socket domain we are using (Unix Domain or TCP/IP)
     bool benchmark_mode;
+    char *command_type;
+    char *config_file_path;
+    bool interactive_mode;
     bool verbose; // print additional information during runtime
 } client_t;
 

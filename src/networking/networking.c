@@ -1,6 +1,7 @@
 #include "networking.h"
 #include "../client.h"
 #include "../utils.h"
+#include <assert.h>
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <netinet/in.h>
@@ -16,6 +17,9 @@
 
 #include "../commands/common/command_registry.h"
 #include "../counter.h"
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <errno.h>
 
 int start_server()
 {
@@ -38,12 +42,15 @@ int start_server()
     server_addr.sin_addr.s_addr = INADDR_ANY;
     server_addr.sin_port = htons(server.port);
 
+    assert(server_addr.sin_port != 0);
+
     if (bind(server_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) <
         0) {
         perror("bind failed");
         close(server_fd);
         return -1;
     }
+    assert(server_fd != -1);
 
     if (listen(server_fd, BACKLOG) < 0) {
         perror("listen");
@@ -62,24 +69,35 @@ int start_uds_server()
     struct sockaddr_un server_addr;
 
     int server_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    assert(server_fd != -1);
     if (server_fd == -1) {
         perror("socket failed");
         return -1;
     }
 
     server.fd = server_fd;
+    server.uds_socket_path = FKVS_SOCK_PATH;
 
     memset(&server_addr, 0, sizeof(struct sockaddr_un));
     server_addr.sun_family = AF_UNIX;
-    strncpy(server_addr.sun_path, FKVS_SOCK_PATH,
+    strncpy(server_addr.sun_path, server.uds_socket_path,
             sizeof(server_addr.sun_path) - 1);
-    unlink(server.uds_socket_path);
+
+    if (unlink(server.uds_socket_path) == -1 && errno != ENOENT) {
+        LOG_INFO("failed to unlink socket path during server start up");
+    }
 
     if (bind(server_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) <
         0) {
         perror("bind failed");
         close(server_fd);
         return -1;
+    }
+
+    if (chmod(server.uds_socket_path, 0777) == -1) {
+      perror("Failed to set permissions on Unix socket");
+      close(server_fd);
+      return -1;
     }
 
     if (listen(server_fd, BACKLOG) < 0) {
@@ -171,9 +189,13 @@ int start_client(client_t *client)
 
     client->fd = client_fd;
 
+    assert(client_fd != -1);
+    assert(client->port != 0);
+
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(client->port);
 
+    assert(client->ip_address != NULL);
     if (inet_pton(AF_INET, client->ip_address, &server_addr.sin_addr) <= 0) {
         perror("Invalid address/ Address not supported");
         return -1;
@@ -185,10 +207,12 @@ int start_client(client_t *client)
         return -1;
     }
 
-    if (client->verbose) {
+    if (client->verbose && client->interactive_mode) {
         printf("Connected to server %s on port %d\n", client->ip_address,
                client->port);
     }
+
+    assert(client_fd != -1);
     return client_fd;
 }
 
@@ -215,7 +239,7 @@ int start_uds_client(client_t *client)
         return -1;
     }
 
-    if (client->verbose) {
+    if (client->verbose && client->interactive_mode) {
         printf("Connected to server via unix domain socket \n");
     }
     return client_fd;

@@ -1,7 +1,7 @@
 #ifndef NETWORKING_H
 #define NETWORKING_H
 
-#define FKVS_SOCK_PATH "/tmp/fkvs.sock"
+#define FKVS_SOCK_PATH "/var/run/fkvs/fkvs.sock"
 
 #ifdef SERVER
 #include "../client.h"

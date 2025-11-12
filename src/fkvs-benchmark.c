@@ -1,6 +1,8 @@
 #include "client.h"
 #include "commands/client/client_command_handlers.h"
 #include "networking/networking.h"
+
+#include <assert.h>
 #include <errno.h>
 #include <netinet/tcp.h>
 #include <pthread.h>
@@ -147,6 +149,7 @@ static void *worker(void *arg)
         fd = start_client(&client);
     }
 
+    assert(fd != -1);
     if (fd != -1) {
         if (client.socket_domain == TCP_IP) {
             tune_socket(fd);
