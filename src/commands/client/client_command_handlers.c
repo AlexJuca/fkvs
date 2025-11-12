@@ -4,6 +4,8 @@
 #include "../../client.h"
 #include "../../commands/common/command_parser.h"
 #include "../../commands/common/command_defs.h"
+
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -33,6 +35,10 @@ void cmd_get(const command_args_t args, void (*response_cb)(client_t *client))
         return;
     }
 
+    assert(cmd_len != 0);
+    assert(args.client->fd != -1);
+    assert(binary_cmd != NULL);
+
     send(args.client->fd, binary_cmd, cmd_len, 0);
     free(binary_cmd);
     response_cb(args.client);
@@ -61,6 +67,10 @@ void cmd_set(const command_args_t args, void (*response_cb)(client_t *client))
         return;
     }
 
+    assert(cmd_len != 0);
+    assert(args.client->fd != -1);
+    assert(binary_cmd != NULL);
+
     send(args.client->fd, binary_cmd, cmd_len, 0);
     free(binary_cmd);
     response_cb(args.client);
@@ -87,6 +97,10 @@ void cmd_incr(const command_args_t args, void (*response_cb)(client_t *client))
         fprintf(stderr, "(error) Failed to construct INCR command\n");
         return;
     }
+
+    assert(cmd_len != 0);
+    assert(args.client->fd != -1);
+    assert(binary_cmd != NULL);
 
     send(args.client->fd, binary_cmd, cmd_len, 0);
     free(binary_cmd);
@@ -117,6 +131,10 @@ void cmd_incr_by(const command_args_t args,
         return;
     }
 
+    assert(cmd_len != 0);
+    assert(args.client->fd != -1);
+    assert(binary_cmd != NULL);
+
     send(args.client->fd, binary_cmd, cmd_len, 0);
     free(binary_cmd);
     response_cb(args.client);
@@ -129,6 +147,7 @@ void cmd_ping(const command_args_t args, void (*response_cb)(client_t *client))
     }
 
     size_t cmd_len;
+
     char value[VALUE_LEN];
     if (sscanf(args.cmd, "PING \"%127[^\"]\"s", value) == 1) {
 
@@ -147,11 +166,16 @@ void cmd_ping(const command_args_t args, void (*response_cb)(client_t *client))
         return;
     }
 
+    assert(ARRAY_SIZE(value) == VALUE_LEN);
     unsigned char *binary_cmd = construct_ping_command(value, &cmd_len);
     if (binary_cmd == NULL) {
         fprintf(stderr, "Failed to construct PING command\n");
         return;
     }
+
+    assert(cmd_len != 0);
+    assert(args.client->fd != -1);
+    assert(binary_cmd != NULL);
 
     send(args.client->fd, binary_cmd, cmd_len, 0);
     free(binary_cmd);
@@ -165,15 +189,19 @@ void cmd_info(const command_args_t args, void (*response_cb)(client_t *client))
     }
 
     size_t cmd_len;
-    unsigned char *info_cmd = construct_info_command(&cmd_len);
-    if (!info_cmd) {
+    unsigned char *binary_cmd = construct_info_command(&cmd_len);
+    if (!binary_cmd) {
         fprintf(stderr, "Failed to construct INFO command\n");
         return;
     }
-    send(args.client->fd, info_cmd, cmd_len, 0);
-    free(info_cmd);
+    assert(cmd_len != 0);
+    assert(args.client->fd != -1);
+    assert(binary_cmd != NULL);
+    send(args.client->fd, binary_cmd, cmd_len, 0);
+    free(binary_cmd);
     response_cb(args.client);
 }
+
 void cmd_decr(const command_args_t args, void (*response_cb)(client_t *client))
 {
     if (strncmp(args.cmd, "DECR ", 4) != 0) {
@@ -195,6 +223,10 @@ void cmd_decr(const command_args_t args, void (*response_cb)(client_t *client))
         fprintf(stderr, "(error) Failed to construct DECR command\n");
         return;
     }
+
+    assert(cmd_len != 0);
+    assert(args.client->fd != -1);
+    assert(binary_cmd != NULL);
 
     send(args.client->fd, binary_cmd, cmd_len, 0);
     free(binary_cmd);

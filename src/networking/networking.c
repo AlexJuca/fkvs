@@ -1,6 +1,7 @@
 #include "networking.h"
 #include "../client.h"
 #include "../utils.h"
+#include <assert.h>
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <netinet/in.h>
@@ -41,12 +42,15 @@ int start_server()
     server_addr.sin_addr.s_addr = INADDR_ANY;
     server_addr.sin_port = htons(server.port);
 
+    assert(server_addr.sin_port != 0);
+
     if (bind(server_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) <
         0) {
         perror("bind failed");
         close(server_fd);
         return -1;
     }
+    assert(server_fd != -1);
 
     if (listen(server_fd, BACKLOG) < 0) {
         perror("listen");
@@ -65,6 +69,7 @@ int start_uds_server()
     struct sockaddr_un server_addr;
 
     int server_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    assert(server_fd != -1);
     if (server_fd == -1) {
         perror("socket failed");
         return -1;
@@ -184,9 +189,13 @@ int start_client(client_t *client)
 
     client->fd = client_fd;
 
+    assert(client_fd != -1);
+    assert(client->port != 0);
+
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(client->port);
 
+    assert(client->ip_address != NULL);
     if (inet_pton(AF_INET, client->ip_address, &server_addr.sin_addr) <= 0) {
         perror("Invalid address/ Address not supported");
         return -1;
@@ -202,6 +211,8 @@ int start_client(client_t *client)
         printf("Connected to server %s on port %d\n", client->ip_address,
                client->port);
     }
+
+    assert(client_fd != -1);
     return client_fd;
 }
 
