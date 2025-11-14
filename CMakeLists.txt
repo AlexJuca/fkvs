@@ -14,7 +14,7 @@ if(APPLE)
   add_executable(fkvs-server src/memory.c src/counter.c src/client.c src/core/list.c src/config.c src/networking/networking.c src/server.c src/core/hashtable.c src/commands/common/command_registry.c src/commands/server/server_command_handlers.c src/io/event_dispatcher_kqueue.c)
   target_compile_definitions(fkvs-server PRIVATE SERVER)
 
-  add_executable(fkvs-benchmark src/fkvs-benchmark.c src/client.c src/core/list.c src/networking/networking.c src/commands/common/command_parser.c src/commands/client/client_command_handlers.c)
+  add_executable(fkvs-benchmark src/string_utils.c src/fkvs-benchmark.c src/client.c src/core/list.c src/networking/networking.c src/commands/common/command_parser.c src/commands/client/client_command_handlers.c)
   target_compile_definitions(fkvs-benchmark PRIVATE CLI)
 elseif(LINUX)
   find_library(LIBURING liburing)
@@ -28,18 +28,21 @@ elseif(LINUX)
     target_compile_definitions(fkvs-server PRIVATE SERVER)
   endif()
 
-  add_executable(fkvs-benchmark src/fkvs-benchmark.c src/client.c src/core/list.c src/networking/networking.c src/commands/common/command_parser.c src/commands/client/client_command_handlers.c)
+  add_executable(fkvs-benchmark src/string_utils.c src/fkvs-benchmark.c src/client.c src/core/list.c src/networking/networking.c src/commands/common/command_parser.c src/commands/client/client_command_handlers.c)
   target_compile_definitions(fkvs-benchmark PRIVATE CLI)
 endif()
 
 # Add test executable
 add_executable(test_counter tests/test_counter.c src/counter.c)
-target_link_libraries(test_counter PRIVATE Threads::Threads)
+add_executable(test_string_utils tests/test_string_utils.c src/string_utils.c)
+target_link_libraries(test_counter)
+target_link_libraries(test_string_utils)
 
 # Enable testing
 enable_testing()
 add_test(NAME CounterTest COMMAND test_counter)
-add_executable(fkvs-cli src/fkvs-cli.c src/config.c src/commands/common/command_parser.c src/commands/client/client_command_handlers.c)
+add_test(NAME StringUtilsTest COMMAND test_string_utils)
+add_executable(fkvs-cli src/string_utils.c src/fkvs-cli.c src/config.c src/commands/common/command_parser.c src/commands/client/client_command_handlers.c)
   target_link_libraries(fkvs-benchmark PRIVATE Threads::Threads)
   target_link_libraries(fkvs-cli PUBLIC linenoise)
   target_compile_definitions(fkvs-cli PRIVATE CLI)

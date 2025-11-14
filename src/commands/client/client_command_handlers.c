@@ -1,11 +1,10 @@
 #include "../../commands/client/client_command_handlers.h"
-#include "../../keygen.h"
-#include "../../utils.h"
 #include "../../client.h"
-#include "../../commands/common/command_parser.h"
 #include "../../commands/common/command_defs.h"
-
-#include <assert.h>
+#include "../../commands/common/command_parser.h"
+#include "../../keygen.h"
+#include "../../string_utils.h"
+#include "../../utils.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,7 +14,7 @@
 
 void cmd_get(const command_args_t args, void (*response_cb)(client_t *client))
 {
-    if (strncmp(args.cmd, "GET ", 4) != 0) {
+    if (strncasecmp(args.cmd, "GET ", 4) != 0) {
         return;
     }
 
@@ -35,10 +34,6 @@ void cmd_get(const command_args_t args, void (*response_cb)(client_t *client))
         return;
     }
 
-    assert(cmd_len != 0);
-    assert(args.client->fd != -1);
-    assert(binary_cmd != NULL);
-
     send(args.client->fd, binary_cmd, cmd_len, 0);
     free(binary_cmd);
     response_cb(args.client);
@@ -46,7 +41,7 @@ void cmd_get(const command_args_t args, void (*response_cb)(client_t *client))
 
 void cmd_set(const command_args_t args, void (*response_cb)(client_t *client))
 {
-    if (strncmp(args.cmd, "SET ", 4) != 0) {
+    if (strncasecmp(args.cmd, "SET ", 4) != 0) {
         return;
     }
 
@@ -67,10 +62,6 @@ void cmd_set(const command_args_t args, void (*response_cb)(client_t *client))
         return;
     }
 
-    assert(cmd_len != 0);
-    assert(args.client->fd != -1);
-    assert(binary_cmd != NULL);
-
     send(args.client->fd, binary_cmd, cmd_len, 0);
     free(binary_cmd);
     response_cb(args.client);
@@ -78,7 +69,7 @@ void cmd_set(const command_args_t args, void (*response_cb)(client_t *client))
 
 void cmd_incr(const command_args_t args, void (*response_cb)(client_t *client))
 {
-    if (strncmp(args.cmd, "INCR ", 4) != 0) {
+    if (strncasecmp(args.cmd, "INCR ", 4) != 0) {
         return;
     }
 
@@ -98,10 +89,6 @@ void cmd_incr(const command_args_t args, void (*response_cb)(client_t *client))
         return;
     }
 
-    assert(cmd_len != 0);
-    assert(args.client->fd != -1);
-    assert(binary_cmd != NULL);
-
     send(args.client->fd, binary_cmd, cmd_len, 0);
     free(binary_cmd);
     response_cb(args.client);
@@ -110,7 +97,7 @@ void cmd_incr(const command_args_t args, void (*response_cb)(client_t *client))
 void cmd_incr_by(const command_args_t args,
                  void (*response_cb)(client_t *client))
 {
-    if (strncmp(args.cmd, "INCRBY ", 7) != 0) {
+    if (strncasecmp(args.cmd, "INCRBY ", 7) != 0) {
         return;
     }
 
@@ -131,10 +118,6 @@ void cmd_incr_by(const command_args_t args,
         return;
     }
 
-    assert(cmd_len != 0);
-    assert(args.client->fd != -1);
-    assert(binary_cmd != NULL);
-
     send(args.client->fd, binary_cmd, cmd_len, 0);
     free(binary_cmd);
     response_cb(args.client);
@@ -142,23 +125,17 @@ void cmd_incr_by(const command_args_t args,
 
 void cmd_ping(const command_args_t args, void (*response_cb)(client_t *client))
 {
-    if (strncmp(args.cmd, "PING ", 5) != 0 && strncmp(args.cmd, "PING", 4) != 0) {
+    if (strncasecmp(args.cmd, "PING ", 5) != 0) {
         return;
     }
 
     size_t cmd_len;
-
     char value[VALUE_LEN];
-    if (sscanf(args.cmd, "PING \"%127[^\"]\"s", value) == 1) {
+    if (sscanf(to_upper(args.cmd), "PING \"%127[^\"]\"s", value) == 1) {
 
-    } else if (strcmp(args.cmd, "PING") == 0) {
-      // TODO: Find a cleaner alternative for this.
-      value[0] = 'P';
-      value[1] = 'O';
-      value[2] = 'N';
-      value[3] = 'G';
-      value[4] = '\0';
-    } else if (sscanf(args.cmd, "PING %127s", value) == 1) {
+    } else if (sscanf(to_upper(args.cmd), "PING") == 1) {
+
+    } else if (sscanf(to_upper(args.cmd), "PING %127s", value) == 1) {
 
     } else {
         printf("(error) ERR wrong number of arguments for 'ping' command\n");
@@ -166,16 +143,11 @@ void cmd_ping(const command_args_t args, void (*response_cb)(client_t *client))
         return;
     }
 
-    assert(ARRAY_SIZE(value) == VALUE_LEN);
     unsigned char *binary_cmd = construct_ping_command(value, &cmd_len);
     if (binary_cmd == NULL) {
         fprintf(stderr, "Failed to construct PING command\n");
         return;
     }
-
-    assert(cmd_len != 0);
-    assert(args.client->fd != -1);
-    assert(binary_cmd != NULL);
 
     send(args.client->fd, binary_cmd, cmd_len, 0);
     free(binary_cmd);
@@ -184,27 +156,24 @@ void cmd_ping(const command_args_t args, void (*response_cb)(client_t *client))
 
 void cmd_info(const command_args_t args, void (*response_cb)(client_t *client))
 {
-    if (strncmp(args.cmd, "INFO", 4) != 0) {
+    if (strncasecmp(args.cmd, "INFO", 4) != 0) {
         return;
     }
 
     size_t cmd_len;
-    unsigned char *binary_cmd = construct_info_command(&cmd_len);
-    if (!binary_cmd) {
+    unsigned char *info_cmd = construct_info_command(&cmd_len);
+    if (!info_cmd) {
         fprintf(stderr, "Failed to construct INFO command\n");
         return;
     }
-    assert(cmd_len != 0);
-    assert(args.client->fd != -1);
-    assert(binary_cmd != NULL);
-    send(args.client->fd, binary_cmd, cmd_len, 0);
-    free(binary_cmd);
+    send(args.client->fd, info_cmd, cmd_len, 0);
+    free(info_cmd);
     response_cb(args.client);
 }
 
 void cmd_decr(const command_args_t args, void (*response_cb)(client_t *client))
 {
-    if (strncmp(args.cmd, "DECR ", 4) != 0) {
+    if (strncasecmp(args.cmd, "DECR ", 4) != 0) {
         return;
     }
 
@@ -224,10 +193,6 @@ void cmd_decr(const command_args_t args, void (*response_cb)(client_t *client))
         return;
     }
 
-    assert(cmd_len != 0);
-    assert(args.client->fd != -1);
-    assert(binary_cmd != NULL);
-
     send(args.client->fd, binary_cmd, cmd_len, 0);
     free(binary_cmd);
     response_cb(args.client);
@@ -241,10 +206,9 @@ void cmd_decr(const command_args_t args, void (*response_cb)(client_t *client))
 void cmd_unknown(const command_args_t args,
                  void (*response_cb)(client_t *client))
 {
-    if (strncmp(args.cmd, "INCR ", 5) && strncmp(args.cmd, "INCRBY ", 6) &&
-        strncmp(args.cmd, "GET ", 4) && strncmp(args.cmd, "SET ", 4) &&
-        strncmp(args.cmd, "PING ", 5) && strncmp(args.cmd, "PING", 4)
-        && strncmp(args.cmd, "DECR ", 5) && strncmp(args.cmd, "INFO", 5)) {
+    if (strncasecmp(args.cmd, "INCR ", 5) == 0 && strncasecmp(args.cmd, "INCRBY ", 6) == 0 &&
+        strncasecmp(args.cmd, "GET ", 4) == 0 && strncasecmp(args.cmd, "SET ", 4) == 0 &&
+        strncasecmp(args.cmd, "PING ", 5) == 0 && strncasecmp(args.cmd, "DECR ", 5) == 0 && strncasecmp(args.cmd, "INFO", 5) == 0) {
         printf("Unknown command \n");
     }
 }
@@ -296,6 +260,7 @@ void execute_command_benchmark(const char *cmd, client_t *client,
         response_cb(args.client);
     } else if (!strcasecmp(cmd, "ping")) {
         unsigned char *binary_cmd = construct_ping_command("", &cmd_len);
+
         send(args.client->fd, binary_cmd, cmd_len, 0);
         free(binary_cmd);
         response_cb(args.client);

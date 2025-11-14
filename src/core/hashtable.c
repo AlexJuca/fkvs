@@ -56,6 +56,7 @@ bool set_value(hashtable_t *table, unsigned char *key, size_t key_len,
         current->key_len = key_len;
         current->next = table->buckets[index];
         table->buckets[index] = current;
+        free(current->key);
     } else {
         // Update existing entry
         free(current->value->ptr);
@@ -65,6 +66,9 @@ bool set_value(hashtable_t *table, unsigned char *key, size_t key_len,
     current->value->encoding = value_type_encoding;
     memcpy(current->value->ptr, value, value_len);
     current->value->value_len = value_len;
+    free(current->value->ptr);
+    free(current->value);
+    free(current);
     return true;
 }
 
