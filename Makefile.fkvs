@@ -12,3 +12,6 @@ setup-and-build: setup build
 
 tests: setup-and-build
 	ctest --output-on-failure
+
+codesign-server: setup-and-build
+	codesign --entitlements entitlements.plist --force --sign - ./fkvs-server
