@@ -2,8 +2,9 @@
 #include "../../response_defs.h"
 #include "../../utils.h"
 #include "../common/command_defs.h"
+
+#include <assert.h>
 #include <stdio.h>
-#include <string.h>
 #include <sys/socket.h>
 #define MAX_COMMANDS 256
 
@@ -38,12 +39,14 @@ void dispatch_command(const int client_fd, unsigned char *buffer,
 void send_ok(const int client_fd)
 {
     const unsigned char ok[] = {STATUS_SUCCESS};
+    assert(client_fd > 0);
     send(client_fd, ok, sizeof ok, 0);
 }
 
 void send_error(const int client_fd)
 {
     const unsigned char error[] = {STATUS_FAILURE};
+    assert(client_fd > 0);
     send(client_fd, error, sizeof error, 0);
 }
 
@@ -61,6 +64,8 @@ void send_reply(const int client_fd, const unsigned char *buffer,
     reply[3] = (bytes_read >> 8) & 0xFF;
     reply[4] = bytes_read & 0xFF;
     memcpy(&reply[5], buffer, bytes_read);
+
+    assert(client_fd > 0);
 
     send(client_fd, reply, full_frame_length, 0);
     free(reply);
@@ -81,6 +86,7 @@ void send_pong(const int client_fd, const unsigned char *buffer)
     reply[4] = value_len & 0xFF;
     memcpy(&reply[5], &buffer[5], value_len);
 
+    assert(client_fd > 0);
     send(client_fd, reply, full_frame_length, 0);
     free(reply);
 }
