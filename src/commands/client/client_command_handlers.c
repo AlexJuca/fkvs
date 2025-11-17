@@ -3,14 +3,15 @@
 #include "../../commands/common/command_defs.h"
 #include "../../commands/common/command_parser.h"
 #include "../../keygen.h"
-#include "../../string_utils.h"
 #include "../../utils.h"
+
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#define KEY_LEN 512
-#define VALUE_LEN 512
+#define MAX_KEY_LEN 512
+#define MAX_VALUE_LEN 512
 
 void cmd_get(const command_args_t args, void (*response_cb)(client_t *client))
 {
@@ -18,7 +19,7 @@ void cmd_get(const command_args_t args, void (*response_cb)(client_t *client))
         return;
     }
 
-    char key[KEY_LEN];
+    char key[MAX_KEY_LEN];
     if (sscanf(args.cmd, "GET %511s", key) == 1) {
 
     } else {
@@ -34,6 +35,9 @@ void cmd_get(const command_args_t args, void (*response_cb)(client_t *client))
         return;
     }
 
+    assert(cmd_len > 0);
+    assert(args.client->fd > 0);
+
     send(args.client->fd, binary_cmd, cmd_len, 0);
     free(binary_cmd);
     response_cb(args.client);
@@ -45,8 +49,8 @@ void cmd_set(const command_args_t args, void (*response_cb)(client_t *client))
         return;
     }
 
-    char value[VALUE_LEN];
-    char key[KEY_LEN];
+    char value[MAX_VALUE_LEN];
+    char key[MAX_KEY_LEN];
     if (sscanf(args.cmd, "SET %511s %511s", key, value) == 2) {
 
     } else {
@@ -62,6 +66,9 @@ void cmd_set(const command_args_t args, void (*response_cb)(client_t *client))
         return;
     }
 
+    assert(cmd_len > 0);
+    assert(args.client->fd > 0);
+
     send(args.client->fd, binary_cmd, cmd_len, 0);
     free(binary_cmd);
     response_cb(args.client);
@@ -73,7 +80,7 @@ void cmd_incr(const command_args_t args, void (*response_cb)(client_t *client))
         return;
     }
 
-    char key[KEY_LEN];
+    char key[MAX_KEY_LEN];
     if (sscanf(args.cmd, "INCR %511s", key) == 1) {
 
     } else {
@@ -89,6 +96,9 @@ void cmd_incr(const command_args_t args, void (*response_cb)(client_t *client))
         return;
     }
 
+    assert(cmd_len > 0);
+    assert(args.client->fd > 0);
+
     send(args.client->fd, binary_cmd, cmd_len, 0);
     free(binary_cmd);
     response_cb(args.client);
@@ -101,8 +111,8 @@ void cmd_incr_by(const command_args_t args,
         return;
     }
 
-    char key[KEY_LEN];
-    char value[VALUE_LEN];
+    char key[MAX_KEY_LEN];
+    char value[MAX_VALUE_LEN];
     if (sscanf(args.cmd, "INCRBY %511s %511s", key, value) == 2) {
 
     } else {
@@ -118,6 +128,9 @@ void cmd_incr_by(const command_args_t args,
         return;
     }
 
+    assert(cmd_len > 0);
+    assert(args.client->fd > 0);
+
     send(args.client->fd, binary_cmd, cmd_len, 0);
     free(binary_cmd);
     response_cb(args.client);
@@ -125,17 +138,23 @@ void cmd_incr_by(const command_args_t args,
 
 void cmd_ping(const command_args_t args, void (*response_cb)(client_t *client))
 {
-    if (strncasecmp(args.cmd, "PING ", 5) != 0) {
-        return;
+    if (strncmp(args.cmd, "PING ", 5) != 0 && strncmp(args.cmd, "PING", 4) != 0) {
+      return;
     }
 
-    size_t cmd_len;
-    char value[VALUE_LEN];
-    if (sscanf(to_upper(args.cmd), "PING \"%127[^\"]\"s", value) == 1) {
+    char value[MAX_VALUE_LEN];
+    if (sscanf(args.cmd, "PING \"%127[^\"]\"s", value) == 1) {
 
-    } else if (sscanf(to_upper(args.cmd), "PING") == 1) {
+    } else if (strcmp(args.cmd, "PING") == 0) {
+      // TODO: Find a cleaner alternative for this.
+      value[0] = 'P';
+      value[1] = 'O';
+      value[2] = 'N';
+      value[3] = 'G';
+      value[4] = '\0';
+    } else if (sscanf(args.cmd, "PING") == 1) {
 
-    } else if (sscanf(to_upper(args.cmd), "PING %127s", value) == 1) {
+    } else if (sscanf(args.cmd, "PING %127s", value) == 1) {
 
     } else {
         printf("(error) ERR wrong number of arguments for 'ping' command\n");
@@ -143,11 +162,15 @@ void cmd_ping(const command_args_t args, void (*response_cb)(client_t *client))
         return;
     }
 
+    size_t cmd_len;
     unsigned char *binary_cmd = construct_ping_command(value, &cmd_len);
     if (binary_cmd == NULL) {
         fprintf(stderr, "Failed to construct PING command\n");
         return;
     }
+
+    assert(cmd_len > 0);
+    assert(args.client->fd > 0);
 
     send(args.client->fd, binary_cmd, cmd_len, 0);
     free(binary_cmd);
@@ -166,6 +189,10 @@ void cmd_info(const command_args_t args, void (*response_cb)(client_t *client))
         fprintf(stderr, "Failed to construct INFO command\n");
         return;
     }
+
+    assert(cmd_len > 0);
+    assert(args.client->fd > 0);
+
     send(args.client->fd, info_cmd, cmd_len, 0);
     free(info_cmd);
     response_cb(args.client);
@@ -177,7 +204,7 @@ void cmd_decr(const command_args_t args, void (*response_cb)(client_t *client))
         return;
     }
 
-    char key[KEY_LEN];
+    char key[MAX_KEY_LEN];
     if (sscanf(args.cmd, "DECR %511s", key) == 1) {
 
     } else {
@@ -193,6 +220,9 @@ void cmd_decr(const command_args_t args, void (*response_cb)(client_t *client))
         return;
     }
 
+    assert(cmd_len > 0);
+    assert(args.client->fd > 0);
+
     send(args.client->fd, binary_cmd, cmd_len, 0);
     free(binary_cmd);
     response_cb(args.client);
@@ -206,9 +236,14 @@ void cmd_decr(const command_args_t args, void (*response_cb)(client_t *client))
 void cmd_unknown(const command_args_t args,
                  void (*response_cb)(client_t *client))
 {
-    if (strncasecmp(args.cmd, "INCR ", 5) == 0 && strncasecmp(args.cmd, "INCRBY ", 6) == 0 &&
-        strncasecmp(args.cmd, "GET ", 4) == 0 && strncasecmp(args.cmd, "SET ", 4) == 0 &&
-        strncasecmp(args.cmd, "PING ", 5) == 0 && strncasecmp(args.cmd, "DECR ", 5) == 0 && strncasecmp(args.cmd, "INFO", 5) == 0) {
+    if (strncmp(args.cmd, "INCR ", 5)&&
+        strncmp(args.cmd, "INCRBY ", 6) &&
+        strncmp(args.cmd, "GET ", 4) &&
+        strncmp(args.cmd, "SET ", 4) &&
+        strncmp(args.cmd, "PING", 4) &&
+        strncmp(args.cmd, "PING ", 5) &&
+        strncmp(args.cmd, "DECR ", 5) &&
+        strncmp(args.cmd, "INFO", 5)) {
         printf("Unknown command \n");
     }
 }
@@ -247,7 +282,7 @@ void execute_command_benchmark(const char *cmd, client_t *client,
              * and use them here so we don't spend too much of our benchmarking
              * time generating and formatting uuid keys as strings
              */
-            char key[KEY_LEN];
+            char key[MAX_KEY_LEN];
             generate_unique_key(key);
 
             binary_cmd = construct_set_command(key, "world", &cmd_len);
@@ -255,11 +290,17 @@ void execute_command_benchmark(const char *cmd, client_t *client,
             binary_cmd = construct_set_command("hello", "world", &cmd_len);
         }
 
+        assert(client->fd > 0);
+        assert(cmd_len > 0);
+
         send(args.client->fd, binary_cmd, cmd_len, 0);
         free(binary_cmd);
         response_cb(args.client);
     } else if (!strcasecmp(cmd, "ping")) {
         unsigned char *binary_cmd = construct_ping_command("", &cmd_len);
+
+        assert(client->fd > 0);
+        assert(cmd_len > 0);
 
         send(args.client->fd, binary_cmd, cmd_len, 0);
         free(binary_cmd);
