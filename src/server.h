@@ -16,25 +16,26 @@ typedef struct {
 } db_t;
 
 typedef struct server_t {
-    bool daemonize;
+    list_t *clients;
+    char *config_file_path;
+    db_t *database;
+    char *uds_socket_path; // Unix domain socket path
+    counter_t metrics;
     int port;
     int fd;
     int event_loop_fd;
+    int event_loop_max_events;
+    int32_t num_disconnected_clients;
     pid_t pid;
+    u_int32_t num_clients;
+    enum socket_domain socket_domain;
+    event_loop_dispatcher_kind event_dispatcher_kind;
+    bool use_io_uring;
     bool is_logging_enabled;
     bool verbose;
     bool show_logo;
-    list_t *clients;
-    u_int32_t num_clients;
-    int32_t num_disconnected_clients;
-    int event_loop_max_events;
-    char *uds_socket_path; // Unix domain socket path
-    enum socket_domain socket_domain;
-    bool use_io_uring;
-    char *config_file_path;
-    db_t *database;
-    counter_t metrics;
-    event_loop_dispatcher_kind event_dispatcher_kind;
-} server_t;
+    bool daemonize;
+} server_t __attribute__((aligned(128)));
+;
 
 #endif // SERVER_H
