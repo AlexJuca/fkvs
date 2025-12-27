@@ -228,6 +228,38 @@ void cmd_decr(const command_args_t args, void (*response_cb)(client_t *client))
     response_cb(args.client);
 }
 
+void cmd_decr_by(const command_args_t args,
+                 void (*response_cb)(client_t *client))
+{
+    if (strncasecmp(args.cmd, "DECRBY ", 7) != 0) {
+        return;
+    }
+
+    char key[MAX_KEY_LEN];
+    char value[MAX_VALUE_LEN];
+    if (sscanf(args.cmd, "DECRBY %511s %511s", key, value) == 2) {
+
+    } else {
+        printf("(error) ERR wrong number of arguments for 'decrby' command\n");
+        printf("(info) Usage: DECRBY <key> <value>\n");
+        return;
+    }
+
+    size_t cmd_len;
+    unsigned char *binary_cmd = construct_decr_by_command(key, value, &cmd_len);
+    if (binary_cmd == NULL) {
+        fprintf(stderr, "(error) Failed to construct DECRBY command\n");
+        return;
+    }
+
+    assert(cmd_len > 0);
+    assert(args.client->fd > 0);
+
+    send(args.client->fd, binary_cmd, cmd_len, 0);
+    free(binary_cmd);
+    response_cb(args.client);
+}
+
 /*
  * TODO: This approach works but is cumbersome to maintain. For future
  * reference, lets implement a solution that doesn't require us to have a
@@ -236,13 +268,14 @@ void cmd_decr(const command_args_t args, void (*response_cb)(client_t *client))
 void cmd_unknown(const command_args_t args,
                  void (*response_cb)(client_t *client))
 {
-    if (strncmp(args.cmd, "INCR ", 5)&&
+    if (strncmp(args.cmd, "INCR ", 5) &&
         strncmp(args.cmd, "INCRBY ", 6) &&
         strncmp(args.cmd, "GET ", 4) &&
         strncmp(args.cmd, "SET ", 4) &&
         strncmp(args.cmd, "PING", 4) &&
         strncmp(args.cmd, "PING ", 5) &&
         strncmp(args.cmd, "DECR ", 5) &&
+		strncmp(args.cmd, "DECRBY ", 7) &&
         strncmp(args.cmd, "INFO", 5)) {
         printf("Unknown command \n");
     }
@@ -250,7 +283,8 @@ void cmd_unknown(const command_args_t args,
 
 const cmd_t command_table[] = {
     {"cmd_set", cmd_set},         {"cmd_get", cmd_get},
-    {"cmd_decr", cmd_decr},       {"cmd_incr", cmd_incr},
+    {"cmd_decr", cmd_decr},		  {"cmd_decr_by", cmd_decr_by},
+    {"cmd_incr", cmd_incr},
     {"cmd_incr_by", cmd_incr_by}, {"cmd_ping", cmd_ping},
     {"cmd_unknown", cmd_unknown},
     {"cmd_info", cmd_info}};

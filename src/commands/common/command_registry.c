@@ -6,6 +6,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <sys/socket.h>
+
 #define MAX_COMMANDS 256
 
 static CommandHandler command_handlers[MAX_COMMANDS] = {0};

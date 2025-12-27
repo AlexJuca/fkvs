@@ -8,5 +8,6 @@
 #define CMD_PING 0x05
 #define CMD_DECR 0x06
 #define CMD_INFO 0x07
+#define CMD_DECR_BY 0x08
 
 #endif // COMMAND_DEFS_H
