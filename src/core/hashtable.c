@@ -40,18 +40,17 @@ void free_hash_table(hashtable_t *table)
     free(table);
 }
 
-bool set_value(const hashtable_t *table, const unsigned char *key, size_t key_len,
-               const void *value, size_t value_len, int value_type_encoding)
+bool set_value(const hashtable_t *table, const unsigned char *key,
+               size_t key_len, const void *value, size_t value_len,
+               int value_type_encoding)
 {
     const size_t index = hash_function(key, key_len, table->size);
     hash_table_entry_t *current = table->buckets[index];
     hash_table_entry_t *prev = NULL;
 
     // Search for existing key
-    while (current != NULL &&
-          (current->key_len != key_len ||
-           memcmp(current->key, key, key_len) != 0))
-    {
+    while (current != NULL && (current->key_len != key_len ||
+                               memcmp(current->key, key, key_len) != 0)) {
         prev = current;
         current = current->next;
     }
@@ -60,7 +59,8 @@ bool set_value(const hashtable_t *table, const unsigned char *key, size_t key_le
     if (is_new_entry) {
         // Create entry
         current = malloc(sizeof(*current));
-        if (!current) return false;
+        if (!current)
+            return false;
 
         current->key = malloc(key_len);
         if (!current->key) {
@@ -123,47 +123,43 @@ bool set_value(const hashtable_t *table, const unsigned char *key, size_t key_le
 bool get_value(hashtable_t *table, unsigned char *key, size_t key_len,
                value_entry_t **value, size_t *value_len)
 {
-  if (!table || !key || !value || !value_len)
-    return false;
-
-  const size_t index = hash_function(key, key_len, table->size);
-
-  for (hash_table_entry_t *current = table->buckets[index];
-       current;
-       current = current->next)
-  {
-    if (current->key_len == key_len &&
-        memcmp(current->key, key, key_len) == 0)
-    {
-      // allocate full value_entry_t
-      value_entry_t *out = malloc(sizeof(value_entry_t));
-      if (!out)
+    if (!table || !key || !value || !value_len)
         return false;
 
-      // deep copy value bytes
-      out->ptr = malloc(current->value->value_len);
-      if (!out->ptr) {
-        free(out);
-        return false;
-      }
+    const size_t index = hash_function(key, key_len, table->size);
 
-      memcpy(out->ptr, current->value->ptr, current->value->value_len);
+    for (hash_table_entry_t *current = table->buckets[index]; current;
+         current = current->next) {
+        if (current->key_len == key_len &&
+            memcmp(current->key, key, key_len) == 0) {
+            // allocate full value_entry_t
+            value_entry_t *out = malloc(sizeof(value_entry_t));
+            if (!out)
+                return false;
 
-      // copy metadata
-      out->value_len = current->value->value_len;
-      out->encoding  = current->value->encoding;
-      out->expirable = current->value->expirable;
-      out->type      = current->value->type;
+            // deep copy value bytes
+            out->ptr = malloc(current->value->value_len);
+            if (!out->ptr) {
+                free(out);
+                return false;
+            }
 
-      *value = out;
-      *value_len = out->value_len;
+            memcpy(out->ptr, current->value->ptr, current->value->value_len);
 
-      return true;
+            // copy metadata
+            out->value_len = current->value->value_len;
+            out->encoding = current->value->encoding;
+            out->expirable = current->value->expirable;
+            out->type = current->value->type;
+
+            *value = out;
+            *value_len = out->value_len;
+
+            return true;
+        }
     }
-  }
 
-  *value = NULL;
-  *value_len = 0;
-  return false;
+    *value = NULL;
+    *value_len = 0;
+    return false;
 }
-
