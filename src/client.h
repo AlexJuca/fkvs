@@ -15,14 +15,15 @@ typedef struct client_t {
     char *command;
     char *uds_socket_path; // Unix domain socket path
     char *ip_address;
-    size_t buf_used;             // bytes currently in buffer
-    ssize_t frame_need; // -1 until we know; else total frame size (2 + core_len)
+    size_t buf_used; // bytes currently in buffer
+    ssize_t
+        frame_need; // -1 until we know; else total frame size (2 + core_len)
     int port;
     int fd;
     enum socket_domain
         socket_domain; // The socket domain we are using (Unix Domain or TCP/IP)
 
-    unsigned char buffer[65536]; // adjust if we expect larger frames
+    unsigned char buffer[65536];   // adjust if we expect larger frames
     char ip_str[INET6_ADDRSTRLEN]; // TODO: Remove this in the future
     bool benchmark_mode;
     bool interactive_mode;

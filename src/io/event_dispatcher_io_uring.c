@@ -55,14 +55,16 @@ int run_event_loop()
         struct io_uring_cqe *cqe;
         res = io_uring_wait_cqe(&ring, &cqe);
         if (res < 0) {
-            fprintf(stderr, "Wait for completion queue entry failed: %s\n", strerror(-res));
+            fprintf(stderr, "Wait for completion queue entry failed: %s\n",
+                    strerror(-res));
             break;
         }
 
         client_t *c = io_uring_cqe_get_data(cqe);
         if (cqe->res < 0) {
             if (server.verbose) {
-                printf("Client fd=%d operation failed (res=%d)\n", c ? c->fd : -1, cqe->res);
+                printf("Client fd=%d operation failed (res=%d)\n",
+                       c ? c->fd : -1, cqe->res);
             }
             close_and_drop_client(&ring, c);
             io_uring_cqe_seen(&ring, cqe);
@@ -90,7 +92,8 @@ int run_event_loop()
                     set_tcp_no_delay(cfd);
                 }
 
-                client_t *new_client = init_client(cfd, ss, server.socket_domain);
+                client_t *new_client =
+                    init_client(cfd, ss, server.socket_domain);
                 if (!new_client) {
                     continue; // Already closed on failure.
                 }
@@ -99,12 +102,14 @@ int run_event_loop()
                 server.num_clients++;
 
                 if (server.verbose) {
-                    printf("Client connected fd=%d %s:%d (total=%d)\n", new_client->fd, new_client->ip_str,
-                           new_client->port, (int)server.num_clients);
+                    printf("Client connected fd=%d %s:%d (total=%d)\n",
+                           new_client->fd, new_client->ip_str, new_client->port,
+                           (int)server.num_clients);
                 }
 
                 struct io_uring_sqe *sqe = io_uring_get_sqe(&ring);
-                io_uring_prep_recv(sqe, new_client->fd, new_client->buffer, sizeof(new_client->buffer), 0);
+                io_uring_prep_recv(sqe, new_client->fd, new_client->buffer,
+                                   sizeof(new_client->buffer), 0);
                 io_uring_sqe_set_data(sqe, new_client);
                 sqe_count++;
 
@@ -119,19 +124,25 @@ int run_event_loop()
             c->buf_used += cqe->res;
 
             if (server.verbose) {
-                printf("fd=%d read %d bytes (buf_used=%zu)\n", c->fd, cqe->res, c->buf_used);
+                printf("fd=%d read %d bytes (buf_used=%zu)\n", c->fd, cqe->res,
+                       c->buf_used);
             }
 
             // Process as many complete frames as possible.
             try_process_frames(c);
 
-            if (c->buf_used == sizeof(c->buffer) && c->frame_need > 0 && (ssize_t)c->buf_used < c->frame_need) {
-                fprintf(stderr, "fd=%d frame exceeds buffer capacity; dropping client\n", c->fd);
+            if (c->buf_used == sizeof(c->buffer) && c->frame_need > 0 &&
+                (ssize_t)c->buf_used < c->frame_need) {
+                fprintf(
+                    stderr,
+                    "fd=%d frame exceeds buffer capacity; dropping client\n",
+                    c->fd);
                 close_and_drop_client(&ring, c);
             } else {
                 // Re-add to the ring for further reads.
                 struct io_uring_sqe *sqe = io_uring_get_sqe(&ring);
-                io_uring_prep_recv(sqe, c->fd, c->buffer + c->buf_used, sizeof(c->buffer) - c->buf_used, 0);
+                io_uring_prep_recv(sqe, c->fd, c->buffer + c->buf_used,
+                                   sizeof(c->buffer) - c->buf_used, 0);
                 io_uring_sqe_set_data(sqe, c);
                 sqe_count++;
 

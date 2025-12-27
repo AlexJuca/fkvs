@@ -23,6 +23,7 @@ void init_command_handlers(hashtable_t *ht)
     register_command(CMD_PING, handle_ping_command);
     register_command(CMD_DECR, handle_decr_command);
     register_command(CMD_INFO, handle_info_command);
+	register_command(CMD_DECR_BY, handle_decr_by_command);
 }
 
 void handle_set_command(int client_fd, unsigned char *buffer, size_t bytes_read)
@@ -282,6 +283,99 @@ void handle_incr_by_command(const int client_fd, unsigned char *buffer,
     if (!set_value(table, &buffer[5], key_len, (unsigned char *)result,
                    result_len, VALUE_ENTRY_TYPE_INT)) {
         fprintf(stderr, "Unable to set incremented value.\n");
+        send_error(client_fd);
+        free(old_value);
+        return;
+    }
+
+    assert(client_fd > 0);
+    assert(result_len >= 1);
+
+    send_reply(client_fd, (unsigned char *)result, result_len);
+    free(old_value);
+}
+
+void handle_decr_by_command(const int client_fd, unsigned char *buffer,
+                            const size_t bytes_read)
+{
+    const size_t command_length = buffer[0] << 8 | buffer[1];
+    const size_t key_len = buffer[3] << 8 | buffer[4];
+    const size_t key_position_offset = 5;
+    const size_t pos = key_position_offset + key_len;
+    const size_t offset = 2;
+
+    assert(buffer[2] == CMD_DECR_BY);
+
+    if (pos + offset > bytes_read) {
+        fprintf(stderr, "Invalid buffer: too short for value length.\n");
+        send_error(client_fd);
+        return;
+    }
+
+    const size_t value_length = buffer[pos] << 8 | buffer[pos + 1];
+    if (pos + offset + value_length > bytes_read) {
+        fprintf(stderr, "Invalid buffer: too short for increment.\n");
+        send_error(client_fd);
+        return;
+    }
+
+    unsigned char *decr_str = malloc(pos + offset + value_length);
+    if (!decr_str) {
+        send_error(client_fd);
+        return;
+    }
+
+    memcpy(decr_str, buffer + pos + offset, value_length);
+
+    if (!is_integer(decr_str, value_length)) {
+        fprintf(stderr, "Increment value is not an integer.\n");
+        send_error(client_fd);
+        return;
+    }
+
+    if (bytes_read - offset != command_length) {
+        fprintf(stderr, "Incomplete command data for DECR_BY.\n");
+        send_error(client_fd);
+        return;
+    }
+
+    value_entry_t *old_value;
+    size_t old_value_len;
+    if (!get_value(table, &buffer[5], key_len, &old_value, &old_value_len)) {
+		const char *default_value = "0";
+		const int default_value_len = strlen(default_value);
+        if (!set_value(table, &buffer[5], key_len, (unsigned char *)default_value,
+                   default_value_len, VALUE_ENTRY_TYPE_INT)) {
+          fprintf(stderr, "Unable to set default value.\n");
+          send_error(client_fd);
+          free(old_value);
+          return;
+    	}
+
+		get_value(table, &buffer[5], key_len, &old_value, &old_value_len);
+    }
+
+    if (old_value->encoding != VALUE_ENTRY_TYPE_INT) {
+        fprintf(stderr, "Stored value is not an integer.\n");
+        send_error(client_fd);
+        free(old_value);
+        return;
+    }
+
+    const uint64_t current = strtoull(old_value->ptr, NULL, 10);
+    const uint64_t increment = strtoull((const char *)decr_str, NULL, 10);
+
+    const uint64_t sum = current + increment;
+    if (server.verbose) {
+        printf("Value incremented to %llu\n", sum);
+    }
+
+    const char *result = uint64_to_string(sum);
+    const size_t result_len = strlen(result);
+
+    if (!set_value(table, &buffer[5], key_len, (unsigned char *)result,
+                   result_len, VALUE_ENTRY_TYPE_INT)) {
+        fprintf(stderr, "Unable to set decremented value.\n");
         send_error(client_fd);
         free(old_value);
         return;

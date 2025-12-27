@@ -1,8 +1,8 @@
 #include "networking.h"
 #include "../client.h"
 #include "../utils.h"
-#include <assert.h>
 #include <arpa/inet.h>
+#include <assert.h>
 #include <fcntl.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
@@ -17,9 +17,9 @@
 
 #include "../commands/common/command_registry.h"
 #include "../counter.h"
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <errno.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 int start_server()
 {
@@ -95,9 +95,9 @@ int start_uds_server()
     }
 
     if (chmod(server.uds_socket_path, 0777) == -1) {
-      perror("Failed to set permissions on Unix socket");
-      close(server_fd);
-      return -1;
+        perror("Failed to set permissions on Unix socket");
+        close(server_fd);
+        return -1;
     }
 
     if (listen(server_fd, BACKLOG) < 0) {

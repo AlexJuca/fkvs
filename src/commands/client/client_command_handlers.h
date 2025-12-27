@@ -32,6 +32,8 @@ void cmd_incr(command_args_t args, void (*response_cb)(client_t *client));
 
 void cmd_incr_by(command_args_t args, void (*response_cb)(client_t *client));
 
+void cmd_decr_by(command_args_t args, void (*response_cb)(client_t *client));
+
 void cmd_ping(command_args_t args, void (*response_cb)(client_t *client));
 
 void cmd_info(command_args_t args, void (*response_cb)(client_t *client));
