@@ -1,4 +1,4 @@
-## Event Dispatchers Overview
+# Event Dispatchers Overview
 
 fkvs supports multiple event dispatchers, leveraging the available I/O technologies available on
 the host operating system for the best possible I/O performance.
