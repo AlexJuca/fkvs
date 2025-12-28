@@ -100,7 +100,7 @@ jobs:
       - name: Run CodeChecker analysis
         id: codechecker
         run: |
-          CodeChecker analyze ${{ steps.strings.outputs.build-output-dir }}/compile_commands.json --output ${{ github.workspace }}/reports
+          CodeChecker analyze ${{ steps.strings.outputs.build-output-dir }}/compile_commands.json --output ${{ github.workspace }}/${{ matrix.os }}/reports
           CodeChecker parse ${{ github.workspace }}/reports --export html --output ${{ github.workspace }}/html_reports || true
           echo "result-html-dir=${{ github.workspace }}/html_reports" >> $GITHUB_OUTPUT
 
