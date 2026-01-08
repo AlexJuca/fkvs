@@ -96,6 +96,7 @@ $ ./fkvs-cli -h 127.0.0.1 -p 5995 --non-interactive
 - INCR key
 - INCRBY key value
 - DECR key
+- DECRBY key value
 - INFO
 
 ## Contributing
