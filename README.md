@@ -99,6 +99,13 @@ $ ./fkvs-cli -h 127.0.0.1 -p 5995 --non-interactive
 - DECRBY key value
 - INFO
 
+## Documentation
+
+- [Benchmarking Guide](docs/benchmarking.md) - How to benchmark FKVS performance
+- [Profiling Guide](docs/profiling.md) - Profiling with Instruments on macOS
+- [Performance Roadmap](docs/performance-roadmap.md) - Path to 1M req/s optimization plan
+- [Event Dispatchers](docs/event-dispatchers.md) - Event loop implementations
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
