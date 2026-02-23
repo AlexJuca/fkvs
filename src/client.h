@@ -9,7 +9,7 @@
 #include <unistd.h>
 
 typedef struct client_t {
-#define BUFFER_SIZE 655365
+#define BUFFER_SIZE 65536
     char *command_type;
     char *config_file_path;
     char *command;
@@ -24,6 +24,8 @@ typedef struct client_t {
         socket_domain; // The socket domain we are using (Unix Domain or TCP/IP)
 
     unsigned char buffer[65536];   // adjust if we expect larger frames
+    unsigned char wbuf[65536];     // write buffer for response batching
+    size_t wbuf_used;              // bytes currently in write buffer
     char ip_str[INET6_ADDRSTRLEN]; // TODO: Remove this in the future
     bool benchmark_mode;
     bool interactive_mode;

@@ -23,6 +23,7 @@
 typedef struct {
     uint64_t requests; // total requests across all threads
     uint64_t clients;  // number of worker threads
+    uint64_t pipeline_depth; // number of commands to pipeline (default 1)
     bool keep_alive;   // persistent connection per thread
     const char *ip;
     int port;
@@ -53,7 +54,7 @@ static void print_usage_and_exit(const char *prog)
 {
     fprintf(stderr,
             "Usage: %s [-n total_requests] [-c clients] [-h host] [-p port] "
-            "[-k] \n"
+            "[-k] [-P pipeline] \n"
             "  -n N     total requests across all clients (default 100000)\n"
             "  -c C     number of concurrent clients (default 32)\n"
             "  -h HOST  server host/IP (default 127.0.0.1)\n"
@@ -63,7 +64,9 @@ static void print_usage_and_exit(const char *prog)
             "  -t       type of command to use during benchmark (ping, "
             "set, default ping) \n"
             "  -r       use random non-pregenerated keys for all insertion "
-            "commands (set, setx, etc)",
+            "commands (set, setx, etc)\n"
+            "  -P N     pipeline N commands per batch (default 1, no "
+            "pipelining)",
             prog);
     exit(1);
 }
@@ -131,6 +134,7 @@ static void *worker(void *arg)
 {
     worker_args_t *w = arg;
     client_t client = {0};
+    client.frame_need = -1;
 
     if (w->cfg->socket_domain == UNIX) {
         client.socket_domain = w->cfg->socket_domain;
@@ -165,18 +169,23 @@ static void *worker(void *arg)
     pthread_mutex_unlock(&w->gate->mu);
 
     uint64_t ok = 0, ko = 0;
-    for (uint64_t i = 0; i < w->num_reqs_for_this_thread; ++i) {
-        if (fd == -1) {
-            ko++;
-            continue;
+    uint64_t remaining = w->num_reqs_for_this_thread;
+    const uint64_t pdepth = w->cfg->pipeline_depth;
+
+    while (remaining > 0) {
+        const uint64_t batch = remaining < pdepth ? remaining : pdepth;
+
+        // Send phase: fire off `batch` commands without waiting for responses
+        for (uint64_t j = 0; j < batch; j++) {
+            send_command_benchmark(w->cfg->command_type, &client,
+                                   w->cfg->use_random_keys);
         }
 
-        execute_command_benchmark(w->cfg->command_type, &client,
-                                  w->cfg->use_random_keys,
-                                  command_response_handler);
-        ok++;
-        // TODO: Handle failures correctly. We currently don't track failures
-        // (ko's) from failing requests.
+        // Recv phase: consume exactly `batch` framed responses
+        const uint64_t got = recv_pipeline_responses(&client, batch);
+        ok += got;
+        ko += (batch - got);
+        remaining -= batch;
     }
 
     w->completed = ok;
@@ -188,6 +197,7 @@ int main(const int argc, char **argv)
 {
     benchmark_config_t cfg = {.requests = 100000,
                               .clients = 32,
+                              .pipeline_depth = 1,
                               .keep_alive = true,
                               .ip = "127.0.0.1",
                               .port = 5995,
@@ -225,6 +235,10 @@ int main(const int argc, char **argv)
             }
         } else if (strcmp(argv[i], "-r") == 0) {
             cfg.use_random_keys = true;
+        } else if (strcmp(argv[i], "-P") == 0 && i + 1 < argc) {
+            cfg.pipeline_depth = strtoull(argv[++i], NULL, 10);
+            if (cfg.pipeline_depth == 0)
+                cfg.pipeline_depth = 1;
         }
     }
 
@@ -295,8 +309,9 @@ int main(const int argc, char **argv)
     const double elapsed = end - start;
     const double rps = elapsed > 0 ? (double)done / elapsed : 0.0;
 
-    printf("Clients: %llu  Total requests: %llu\n",
-           (unsigned long long)cfg.clients, (unsigned long long)cfg.requests);
+    printf("Clients: %llu  Total requests: %llu  Pipeline: %llu\n",
+           (unsigned long long)cfg.clients, (unsigned long long)cfg.requests,
+           (unsigned long long)cfg.pipeline_depth);
     printf("Completed: %llu  Failed: %llu\n", (unsigned long long)done,
            (unsigned long long)fail);
     printf("Elapsed: %.6f s  Throughput: %.2f req/s\n", elapsed, rps);

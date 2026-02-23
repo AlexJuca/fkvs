@@ -5,6 +5,7 @@
 
 #include <assert.h>
 #include <stdio.h>
+#include <string.h>
 #include <sys/socket.h>
 
 #define MAX_COMMANDS 256
@@ -20,7 +21,31 @@ void register_command(const uint8_t command_id, const CommandHandler handler)
     }
 }
 
-void dispatch_command(const int client_fd, unsigned char *buffer,
+static void wbuf_append(client_t *client, const unsigned char *data,
+                         size_t len)
+{
+    if (client->wbuf_used + len > sizeof(client->wbuf)) {
+        // Write buffer full, flush first
+        wbuf_flush(client);
+    }
+    if (len > sizeof(client->wbuf)) {
+        // Data larger than entire wbuf — send directly
+        send(client->fd, data, len, 0);
+        return;
+    }
+    memcpy(client->wbuf + client->wbuf_used, data, len);
+    client->wbuf_used += len;
+}
+
+void wbuf_flush(client_t *client)
+{
+    if (client->wbuf_used == 0)
+        return;
+    send(client->fd, client->wbuf, client->wbuf_used, 0);
+    client->wbuf_used = 0;
+}
+
+void dispatch_command(client_t *client, unsigned char *buffer,
                       const size_t bytes_read)
 {
     if (bytes_read < 1) {
@@ -30,64 +55,63 @@ void dispatch_command(const int client_fd, unsigned char *buffer,
 
     const uint8_t command_id = buffer[2];
     if (command_handlers[command_id] != NULL) {
-        command_handlers[command_id](client_fd, buffer, bytes_read);
+        command_handlers[command_id](client, buffer, bytes_read);
     } else {
         fprintf(stderr, "No handler registered for command ID %d\n",
                 command_id);
     }
 }
 
-void send_ok(const int client_fd)
+void send_ok(client_t *client)
 {
     const unsigned char ok[] = {STATUS_SUCCESS};
-    assert(client_fd > 0);
-    send(client_fd, ok, sizeof ok, 0);
+    assert(client->fd > 0);
+    wbuf_append(client, ok, sizeof ok);
 }
 
-void send_error(const int client_fd)
+void send_error(client_t *client)
 {
     const unsigned char error[] = {STATUS_FAILURE};
-    assert(client_fd > 0);
-    send(client_fd, error, sizeof error, 0);
+    assert(client->fd > 0);
+    wbuf_append(client, error, sizeof error);
 }
 
-void send_reply(const int client_fd, const unsigned char *buffer,
+void send_reply(client_t *client, const unsigned char *buffer,
                 size_t bytes_read)
 {
     const size_t core_cmd_len = bytes_read + 3;
     const size_t full_frame_length = core_cmd_len + 2;
 
-    unsigned char *reply = malloc(full_frame_length);
+    unsigned char frame[65536];
+    assert(full_frame_length <= sizeof(frame));
 
-    reply[0] = (core_cmd_len >> 8) & 0xFF;
-    reply[1] = core_cmd_len & 0xFF;
-    reply[2] = STATUS_SUCCESS;
-    reply[3] = (bytes_read >> 8) & 0xFF;
-    reply[4] = bytes_read & 0xFF;
-    memcpy(&reply[5], buffer, bytes_read);
+    frame[0] = (core_cmd_len >> 8) & 0xFF;
+    frame[1] = core_cmd_len & 0xFF;
+    frame[2] = STATUS_SUCCESS;
+    frame[3] = (bytes_read >> 8) & 0xFF;
+    frame[4] = bytes_read & 0xFF;
+    memcpy(&frame[5], buffer, bytes_read);
 
-    assert(client_fd > 0);
-
-    send(client_fd, reply, full_frame_length, 0);
-    free(reply);
+    assert(client->fd > 0);
+    wbuf_append(client, frame, full_frame_length);
 }
 
-void send_pong(const int client_fd, const unsigned char *buffer)
+void send_pong(client_t *client, const unsigned char *buffer)
 {
     const size_t value_len = buffer[3] << 8 | buffer[4];
     const size_t core_cmd_len = 1 + 2 + value_len;
     const size_t full_frame_length = 2 + core_cmd_len;
 
-    unsigned char *reply = malloc(full_frame_length);
+    unsigned char frame[65536];
+    assert(full_frame_length <= sizeof(frame));
 
-    reply[0] = (core_cmd_len >> 8) & 0xFF;
-    reply[1] = core_cmd_len & 0xFF;
-    reply[2] = CMD_PING;
-    reply[3] = (value_len >> 8) & 0xFF;
-    reply[4] = value_len & 0xFF;
-    memcpy(&reply[5], &buffer[5], value_len);
+    frame[0] = (core_cmd_len >> 8) & 0xFF;
+    frame[1] = core_cmd_len & 0xFF;
+    frame[2] = CMD_PING;
+    frame[3] = (value_len >> 8) & 0xFF;
+    frame[4] = value_len & 0xFF;
+    memcpy(&frame[5], &buffer[5], value_len);
 
-    assert(client_fd > 0);
-    send(client_fd, reply, full_frame_length, 0);
-    free(reply);
+    assert(client->fd > 0);
+    wbuf_append(client, frame, full_frame_length);
 }

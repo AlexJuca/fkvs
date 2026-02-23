@@ -3,6 +3,7 @@
 #define CLIENT_COMMAND_HANDLERS
 
 #include "../../client.h"
+#include <stdint.h>
 
 typedef struct {
     const char *cmd;
@@ -23,6 +24,11 @@ void execute_command(const char *cmd, client_t *client,
 void execute_command_benchmark(const char *cmd, client_t *client,
                                bool use_pregenerated_keys,
                                void (*response_cb)(client_t *client));
+
+void send_command_benchmark(const char *cmd, client_t *client,
+                            bool use_random_keys);
+
+uint64_t recv_pipeline_responses(client_t *client, uint64_t count);
 
 void cmd_get(command_args_t args, void (*response_cb)(client_t *client));
 

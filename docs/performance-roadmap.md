@@ -293,6 +293,46 @@ Run `perf record` to validate these assumptions.
 
 ---
 
+## Known Bugs (Fix Before Optimizing)
+
+### 1. SET handler stores values twice for integers
+
+**File:** `src/commands/server/server_command_handlers.c:112-118`
+
+```c
+if (!is_integer(&buffer[pos_value], value_len)) {
+    set_value(table, &buffer[pos_key], key_len, &buffer[pos_value],
+              value_len, VALUE_ENTRY_TYPE_RAW);
+}
+
+set_value(table, &buffer[pos_key], key_len, &buffer[pos_value], value_len,
+          VALUE_ENTRY_TYPE_INT);
+```
+
+The second `set_value` call runs unconditionally, so every key ends up with `VALUE_ENTRY_TYPE_INT` encoding regardless of actual type. For integer values, `set_value` is called twice on the same key — the first call (RAW) is immediately overwritten by the second (INT). This is both a correctness issue (non-integer values get INT encoding) and a performance issue (8 mallocs per SET for integer values instead of 4).
+
+**Fix:** The logic should be inverted — store as INT only when `is_integer()` is true, otherwise store as RAW. A single `set_value` call per SET command.
+
+---
+
+### 2. GET handler leaks memory
+
+**File:** `src/commands/server/server_command_handlers.c:135-149`
+
+```c
+value_entry_t *value;
+size_t value_len;
+if (get_value(table, &buffer[5], key_len, &value, &value_len)) {
+    unsigned char *resp_buffer = malloc(value->value_len + 1);
+    // ...
+    send_reply(client_fd, resp_buffer, value_len);
+}
+```
+
+Neither `value` (allocated by `get_value` via deep copy) nor `resp_buffer` are ever freed after `send_reply`. Every GET leaks both allocations. This compounds with the deep-copy issue in `get_value()` (hashtable.c:136-155) — once the deep copy is removed in Phase 2, the `value` leak disappears naturally, but `resp_buffer` still needs to be freed (or eliminated via the per-connection buffer pool).
+
+---
+
 ## Notes
 
 - Redis (single-threaded) achieves ~100K-200K req/s over TCP without pipelining

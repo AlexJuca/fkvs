@@ -6,9 +6,11 @@
 #include "../../utils.h"
 
 #include <assert.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
 
 #define MAX_KEY_LEN 512
 #define MAX_VALUE_LEN 512
@@ -340,6 +342,90 @@ void execute_command_benchmark(const char *cmd, client_t *client,
         free(binary_cmd);
         response_cb(args.client);
     }
+}
+
+void send_command_benchmark(const char *cmd, client_t *client,
+                            bool use_random_keys)
+{
+    size_t cmd_len;
+    unsigned char *binary_cmd = NULL;
+
+    if (!strcasecmp(cmd, "set")) {
+        if (use_random_keys) {
+            char key[MAX_KEY_LEN];
+            generate_unique_key(key);
+            binary_cmd = construct_set_command(key, "world", &cmd_len);
+        } else {
+            binary_cmd = construct_set_command("hello", "world", &cmd_len);
+        }
+    } else if (!strcasecmp(cmd, "ping")) {
+        binary_cmd = construct_ping_command("", &cmd_len);
+    }
+
+    if (binary_cmd == NULL)
+        return;
+
+    assert(client->fd > 0);
+    assert(cmd_len > 0);
+
+    send(client->fd, binary_cmd, cmd_len, 0);
+    free(binary_cmd);
+}
+
+uint64_t recv_pipeline_responses(client_t *client, uint64_t count)
+{
+    uint64_t received = 0;
+
+    while (received < count) {
+        // Try to parse complete frames from what we already have buffered
+        while (received < count && client->buf_used >= 2) {
+            if (client->frame_need < 0) {
+                uint16_t core_len =
+                    ((uint16_t)client->buffer[0] << 8) | client->buffer[1];
+                client->frame_need = 2 + (ssize_t)core_len;
+                if ((size_t)client->frame_need > sizeof(client->buffer)) {
+                    // Frame too large, reset and bail
+                    client->buf_used = 0;
+                    client->frame_need = -1;
+                    return received;
+                }
+            }
+
+            if ((ssize_t)client->buf_used < client->frame_need)
+                break; // need more data
+
+            // Consume one complete frame
+            const size_t frame_len = (size_t)client->frame_need;
+            size_t remain = client->buf_used - frame_len;
+            if (remain)
+                memmove(client->buffer, client->buffer + frame_len, remain);
+            client->buf_used = remain;
+            client->frame_need = -1;
+            received++;
+        }
+
+        if (received >= count)
+            break;
+
+        // Need more data from the socket
+        size_t space = sizeof(client->buffer) - client->buf_used;
+        if (space == 0) {
+            // Buffer full but no complete frame — protocol error
+            client->buf_used = 0;
+            client->frame_need = -1;
+            return received;
+        }
+
+        ssize_t n = recv(client->fd, client->buffer + client->buf_used,
+                         space, 0);
+        if (n <= 0) {
+            // Connection error or timeout
+            return received;
+        }
+        client->buf_used += (size_t)n;
+    }
+
+    return received;
 }
 
 void command_response_handler(client_t *client)
