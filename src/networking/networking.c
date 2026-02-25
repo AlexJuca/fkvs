@@ -18,6 +18,7 @@
 #include "../commands/common/command_registry.h"
 #include "../counter.h"
 #include <errno.h>
+#include <libgen.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 
@@ -83,6 +84,16 @@ int start_uds_server()
     strncpy(server_addr.sun_path, server.uds_socket_path,
             sizeof(server_addr.sun_path) - 1);
 
+    char tmp[sizeof(server_addr.sun_path)];
+    strncpy(tmp, server.uds_socket_path, sizeof(tmp) - 1);
+    tmp[sizeof(tmp) - 1] = '\0';
+    char *dir = dirname(tmp);
+    if (mkdir(dir, 0755) == -1 && errno != EEXIST) {
+        perror("failed to create socket directory");
+        close(server_fd);
+        return -1;
+    }
+
     if (unlink(server.uds_socket_path) == -1 && errno != ENOENT) {
         LOG_INFO("failed to unlink socket path during server start up");
     }
@@ -132,7 +143,7 @@ void try_process_frames(client_t *c)
     }
     for (;;) {
         if (c->buf_used < 2)
-            return; // need length prefix
+            break; // need length prefix
 
         if (c->frame_need < 0) {
             uint16_t core_len = ((uint16_t)c->buffer[0] << 8) | c->buffer[1];
@@ -145,12 +156,12 @@ void try_process_frames(client_t *c)
                 // the client.
                 c->buf_used = 0;
                 c->frame_need = -1;
-                return;
+                break;
             }
         }
 
         if ((ssize_t)c->buf_used < c->frame_need)
-            return; // incomplete frame; we wait for more data
+            break; // incomplete frame; we wait for more data
 
         // We have a complete frame.
         const size_t frame_len = (size_t)c->frame_need;
@@ -160,7 +171,7 @@ void try_process_frames(client_t *c)
         }
 
         // Dispatch exactly one frame.
-        dispatch_command(c->fd, c->buffer, frame_len);
+        dispatch_command(c, c->buffer, frame_len);
         increment_command_count(&server.metrics);
 
         // Shift any remaining bytes (back-to-back frames).
@@ -170,6 +181,10 @@ void try_process_frames(client_t *c)
         c->buf_used = remain;
         c->frame_need = -1; // recompute for next frame
     }
+
+    // Flush any batched responses after processing all queued frames.
+    if (c->wbuf_used > 0)
+        wbuf_flush(c);
 }
 
 #endif

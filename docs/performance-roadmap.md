@@ -95,6 +95,12 @@ typedef struct client_t {
 ### 4. Zero-Copy and I/O Batching (~1.3-1.5x gain)
 **Expected: Push to 1M+ req/s**
 
+> **Important:** See [io_uring findings](io-uring-findings.md) for a detailed analysis
+> of why naive io_uring integration underperforms epoll and what architectural changes
+> are needed to realize gains. Key takeaway: fix the hashtable first (Phase 2) since
+> fkvs is CPU-bound, then redesign io_uring integration with batched SQE submission,
+> registered buffers, DeferTR, and zero-copy paths.
+
 **Current:**
 - Single `recv()` call per event
 - Single `send()` per response
@@ -212,7 +218,7 @@ void handle_set_command(int client_fd, unsigned char *buffer, size_t bytes_read)
 **Effort: 1 week**
 
 1. ✅ Full zero-copy parsing
-2. ✅ io_uring optimization (batch operations with SQ/CQ)
+2. ✅ io_uring optimization (batch operations with SQ/CQ) — see [io_uring findings](io-uring-findings.md) for detailed analysis of when and how to optimize io_uring based on VLDB 2026 research
 3. ✅ Protocol efficiency improvements
 4. ✅ Profile-guided optimization (PGO)
 5. ✅ Compiler optimizations (-march=native, LTO)
@@ -290,6 +296,48 @@ Run `perf record` to validate these assumptions.
 - Swiss Tables: https://abseil.io/about/design/swisstables
 - xxHash: https://github.com/Cyan4973/xxHash
 - Linux perf: https://perf.wiki.kernel.org/index.php/Tutorial
+- io_uring for High-Performance DBMSs (VLDB 2026): https://github.com/mjasny/vldb26-iouring
+- [io_uring findings for fkvs](io-uring-findings.md) -- detailed analysis with benchmark data
+
+---
+
+## Known Bugs (Fix Before Optimizing)
+
+### 1. SET handler stores values twice for integers
+
+**File:** `src/commands/server/server_command_handlers.c:112-118`
+
+```c
+if (!is_integer(&buffer[pos_value], value_len)) {
+    set_value(table, &buffer[pos_key], key_len, &buffer[pos_value],
+              value_len, VALUE_ENTRY_TYPE_RAW);
+}
+
+set_value(table, &buffer[pos_key], key_len, &buffer[pos_value], value_len,
+          VALUE_ENTRY_TYPE_INT);
+```
+
+The second `set_value` call runs unconditionally, so every key ends up with `VALUE_ENTRY_TYPE_INT` encoding regardless of actual type. For integer values, `set_value` is called twice on the same key — the first call (RAW) is immediately overwritten by the second (INT). This is both a correctness issue (non-integer values get INT encoding) and a performance issue (8 mallocs per SET for integer values instead of 4).
+
+**Fix:** The logic should be inverted — store as INT only when `is_integer()` is true, otherwise store as RAW. A single `set_value` call per SET command.
+
+---
+
+### 2. GET handler leaks memory
+
+**File:** `src/commands/server/server_command_handlers.c:135-149`
+
+```c
+value_entry_t *value;
+size_t value_len;
+if (get_value(table, &buffer[5], key_len, &value, &value_len)) {
+    unsigned char *resp_buffer = malloc(value->value_len + 1);
+    // ...
+    send_reply(client_fd, resp_buffer, value_len);
+}
+```
+
+Neither `value` (allocated by `get_value` via deep copy) nor `resp_buffer` are ever freed after `send_reply`. Every GET leaks both allocations. This compounds with the deep-copy issue in `get_value()` (hashtable.c:136-155) — once the deep copy is removed in Phase 2, the `value` leak disappears naturally, but `resp_buffer` still needs to be freed (or eliminated via the per-connection buffer pool).
 
 ---
 
