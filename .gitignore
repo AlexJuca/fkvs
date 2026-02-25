@@ -21,3 +21,4 @@ CTestTestfile.cmake
 .ninja_deps
 .ninja_log
 build.ninja
+.cmake/

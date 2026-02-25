@@ -35,13 +35,17 @@ endif()
 # Add test executable
 add_executable(test_counter tests/test_counter.c src/counter.c)
 add_executable(test_string_utils tests/test_string_utils.c src/string_utils.c)
+add_executable(test_integration tests/test_integration.c src/core/hashtable.c src/commands/common/command_registry.c src/commands/common/command_parser.c src/commands/server/server_command_handlers.c src/counter.c)
+target_compile_definitions(test_integration PRIVATE SERVER)
 target_link_libraries(test_counter)
 target_link_libraries(test_string_utils)
+target_link_libraries(test_integration)
 
 # Enable testing
 enable_testing()
 add_test(NAME CounterTest COMMAND test_counter)
 add_test(NAME StringUtilsTest COMMAND test_string_utils)
+add_test(NAME IntegrationTest COMMAND test_integration)
 add_executable(fkvs-cli src/string_utils.c src/fkvs-cli.c src/config.c src/commands/common/command_parser.c src/commands/client/client_command_handlers.c)
   target_link_libraries(fkvs-benchmark PRIVATE Threads::Threads)
   target_link_libraries(fkvs-cli PUBLIC linenoise)
