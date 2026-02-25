@@ -175,7 +175,7 @@ int main(int argc, char *argv[])
     server.database->store = create_hash_table(TABLE_SIZE);
     server.database->expires = create_hash_table(TABLE_SIZE);
 
-    init_command_handlers(server.database->store);
+    init_command_handlers(server.database);
 
 #ifdef __linux__
     if (server.use_io_uring) {

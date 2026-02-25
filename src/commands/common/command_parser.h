@@ -24,4 +24,13 @@ unsigned char *construct_decr_command(const char *key, size_t *command_len);
 
 unsigned char *construct_decr_by_command(const char *key, const char *value, size_t *command_len);
 
+unsigned char *construct_del_command(const char *key, size_t *command_len);
+
+unsigned char *construct_expire_command(const char *key, const char *seconds,
+                                        size_t *command_len);
+
+unsigned char *construct_ttl_command(const char *key, size_t *command_len);
+
+unsigned char *construct_persist_command(const char *key, size_t *command_len);
+
 #endif // COMMAND_PARSER_H

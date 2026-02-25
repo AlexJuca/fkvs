@@ -4,6 +4,7 @@
 #include "../networking/modes.h"
 #include "../networking/networking.h"
 #include "../server.h"
+#include "../ttl.h"
 #include "../utils.h"
 #include "event_dispatcher.h"
 
@@ -11,6 +12,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/timerfd.h>
 #include <unistd.h>
 
 #define QUEUE_DEPTH 256
@@ -49,6 +51,24 @@ int run_event_loop()
         return -1;
     }
 
+    // Create a timerfd for active key expiration sweep (100ms)
+    int tfd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
+    static uint64_t timer_buf; // buffer for timerfd reads
+    static client_t timer_sentinel = {.fd = -1}; // sentinel to identify timer CQEs
+    if (tfd >= 0) {
+        struct itimerspec its = {
+            .it_interval = {0, 100000000},
+            .it_value = {0, 100000000}
+        };
+        timerfd_settime(tfd, 0, &its, NULL);
+        timer_sentinel.fd = tfd;
+
+        struct io_uring_sqe *sqe = io_uring_get_sqe(&ring);
+        io_uring_prep_read(sqe, tfd, &timer_buf, sizeof(timer_buf), 0);
+        io_uring_sqe_set_data(sqe, &timer_sentinel);
+        io_uring_submit(&ring);
+    }
+
     unsigned int sqe_count = 0;
 
     for (;;) {
@@ -61,6 +81,22 @@ int run_event_loop()
         }
 
         client_t *c = io_uring_cqe_get_data(cqe);
+
+        // Handle timer expiration for active sweep
+        if (c == &timer_sentinel) {
+            if (cqe->res > 0) {
+                expire_sweep(server.database->store,
+                             server.database->expires, 20);
+            }
+            // Re-arm the timer read
+            struct io_uring_sqe *sqe = io_uring_get_sqe(&ring);
+            io_uring_prep_read(sqe, tfd, &timer_buf, sizeof(timer_buf), 0);
+            io_uring_sqe_set_data(sqe, &timer_sentinel);
+            io_uring_submit(&ring);
+            io_uring_cqe_seen(&ring, cqe);
+            continue;
+        }
+
         if (cqe->res < 0) {
             if (server.verbose) {
                 printf("Client fd=%d operation failed (res=%d)\n",

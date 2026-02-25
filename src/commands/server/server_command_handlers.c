@@ -1,6 +1,7 @@
 #include "../../commands/server/server_command_handlers.h"
 #include "../../core/hashtable.h"
 #include "../../response_defs.h"
+#include "../../ttl.h"
 #include "../../utils.h"
 #include "../common/command_defs.h"
 #include "../common/command_registry.h"
@@ -12,10 +13,22 @@
 #include <sys/socket.h>
 
 static hashtable_t *table = NULL;
+static hashtable_t *expires = NULL;
 
-void init_command_handlers(hashtable_t *ht)
+static bool check_and_expire(const unsigned char *key, size_t key_len)
 {
-    table = ht;
+    if (is_expired(expires, key, key_len)) {
+        delete_value(table, key, key_len);
+        delete_value(expires, key, key_len);
+        return true;
+    }
+    return false;
+}
+
+void init_command_handlers(db_t *db)
+{
+    table = db->store;
+    expires = db->expires;
     register_command(CMD_SET, handle_set_command);
     register_command(CMD_GET, handle_get_command);
     register_command(CMD_INCR, handle_incr_command);
@@ -23,7 +36,11 @@ void init_command_handlers(hashtable_t *ht)
     register_command(CMD_PING, handle_ping_command);
     register_command(CMD_DECR, handle_decr_command);
     register_command(CMD_INFO, handle_info_command);
-	register_command(CMD_DECR_BY, handle_decr_by_command);
+    register_command(CMD_DECR_BY, handle_decr_by_command);
+    register_command(CMD_DEL, handle_del_command);
+    register_command(CMD_EXPIRE, handle_expire_command);
+    register_command(CMD_TTL, handle_ttl_command);
+    register_command(CMD_PERSIST, handle_persist_command);
 }
 
 void handle_set_command(client_t *client, unsigned char *buffer, size_t bytes_read)
@@ -67,8 +84,6 @@ void handle_set_command(client_t *client, unsigned char *buffer, size_t bytes_re
     const size_t after_key = pos_key + key_len; // first byte after key
 
     // Ensure key bytes are present inside the advertised core
-    // payload layout size up to the end of key_len field is: 1(cmd) +
-    // 2(key_len) + key_len
     const size_t min_core_up_to_key = (size_t)1 + 2 + key_len;
     if (min_core_up_to_key > core_len) {
         send_error(client);
@@ -114,6 +129,9 @@ void handle_set_command(client_t *client, unsigned char *buffer, size_t bytes_re
                   value_len, VALUE_ENTRY_TYPE_RAW);
     }
 
+    // SET clears any existing TTL (matching Redis behavior)
+    remove_expiry(expires, &buffer[pos_key], key_len);
+
     send_reply(client, &buffer[pos_value], value_len);
     free(data);
 }
@@ -127,6 +145,12 @@ void handle_get_command(client_t *client, unsigned char *buffer, size_t bytes_re
     assert(buffer[2] == CMD_GET);
 
     if (bytes_read - 2 == command_len) {
+        // Lazy expiry check
+        if (check_and_expire(&buffer[5], key_len)) {
+            send_error(client);
+            return;
+        }
+
         value_entry_t *value;
         size_t value_len;
         if (get_value(table, &buffer[5], key_len, &value, &value_len)) {
@@ -173,6 +197,9 @@ void handle_incr_command(client_t *client, unsigned char *buffer,
         send_error(client);
         return;
     }
+
+    // Lazy expiry: if expired, treat as nonexistent
+    check_and_expire(&buffer[5], key_len);
 
     value_entry_t *value;
     size_t value_len;
@@ -268,6 +295,9 @@ void handle_incr_by_command(client_t *client, unsigned char *buffer,
         send_error(client);
         return;
     }
+
+    // Lazy expiry: if expired, treat as nonexistent
+    check_and_expire(&buffer[5], key_len);
 
     value_entry_t *old_value;
     size_t old_value_len;
@@ -368,20 +398,23 @@ void handle_decr_by_command(client_t *client, unsigned char *buffer,
         return;
     }
 
+    // Lazy expiry: if expired, treat as nonexistent
+    check_and_expire(&buffer[5], key_len);
+
     value_entry_t *old_value;
     size_t old_value_len;
     if (!get_value(table, &buffer[5], key_len, &old_value, &old_value_len)) {
-		const char *default_value = "0";
-		const int default_value_len = strlen(default_value);
+        const char *default_value = "0";
+        const int default_value_len = strlen(default_value);
         if (!set_value(table, &buffer[5], key_len, (unsigned char *)default_value,
                    default_value_len, VALUE_ENTRY_TYPE_INT)) {
           fprintf(stderr, "Unable to set default value.\n");
           send_error(client);
           free(old_value);
           return;
-    	}
+        }
 
-		get_value(table, &buffer[5], key_len, &old_value, &old_value_len);
+        get_value(table, &buffer[5], key_len, &old_value, &old_value_len);
     }
 
     if (old_value->encoding != VALUE_ENTRY_TYPE_INT) {
@@ -509,6 +542,9 @@ void handle_decr_command(client_t *client, unsigned char *buffer,
         return;
     }
 
+    // Lazy expiry: if expired, treat as nonexistent
+    check_and_expire(&buffer[5], key_len);
+
     value_entry_t *value;
     size_t value_len;
     if (!get_value(table, &buffer[5], key_len, &value, &value_len)) {
@@ -554,4 +590,144 @@ void handle_decr_command(client_t *client, unsigned char *buffer,
     send_reply(client, (unsigned char *)result_str, result_length);
     free(value->ptr);
     free(value);
+}
+
+void handle_del_command(client_t *client, unsigned char *buffer,
+                        size_t bytes_read)
+{
+    const size_t command_len = buffer[0] << 8 | buffer[1];
+    const size_t key_len = buffer[3] << 8 | buffer[4];
+
+    assert(buffer[2] == CMD_DEL);
+
+    if (bytes_read - 2 != command_len) {
+        fprintf(stderr, "Incomplete command data for DEL.\n");
+        send_error(client);
+        return;
+    }
+
+    delete_value(table, &buffer[5], key_len);
+    delete_value(expires, &buffer[5], key_len);
+
+    send_ok(client);
+}
+
+void handle_expire_command(client_t *client, unsigned char *buffer,
+                           size_t bytes_read)
+{
+    if (bytes_read < 5) {
+        send_error(client);
+        return;
+    }
+
+    const uint16_t core_len = ((uint16_t)buffer[0] << 8) | buffer[1];
+
+    assert(buffer[2] == CMD_EXPIRE);
+
+    if (bytes_read - 2 < core_len) {
+        send_error(client);
+        return;
+    }
+
+    const uint16_t key_len = ((uint16_t)buffer[3] << 8) | buffer[4];
+    const size_t pos_key = 5;
+    const size_t after_key = pos_key + key_len;
+
+    if (after_key + 2 > bytes_read) {
+        send_error(client);
+        return;
+    }
+
+    const uint16_t ttl_str_len =
+        ((uint16_t)buffer[after_key] << 8) | buffer[after_key + 1];
+    const size_t pos_ttl = after_key + 2;
+
+    if (pos_ttl + ttl_str_len > bytes_read) {
+        send_error(client);
+        return;
+    }
+
+    // Verify key exists in store
+    value_entry_t *val;
+    size_t val_len;
+    if (!get_value(table, &buffer[pos_key], key_len, &val, &val_len)) {
+        send_error(client);
+        return;
+    }
+    free(val->ptr);
+    free(val);
+
+    // Parse seconds string
+    char sec_buf[32];
+    size_t copy_len = ttl_str_len < sizeof(sec_buf) - 1 ? ttl_str_len : sizeof(sec_buf) - 1;
+    memcpy(sec_buf, &buffer[pos_ttl], copy_len);
+    sec_buf[copy_len] = '\0';
+
+    int64_t seconds = strtoll(sec_buf, NULL, 10);
+    int64_t deadline_ms = fkvs_now_ms() + seconds * 1000;
+
+    set_expiry(expires, &buffer[pos_key], key_len, deadline_ms);
+
+    send_ok(client);
+}
+
+void handle_ttl_command(client_t *client, unsigned char *buffer,
+                        size_t bytes_read)
+{
+    const size_t command_len = buffer[0] << 8 | buffer[1];
+    const size_t key_len = buffer[3] << 8 | buffer[4];
+
+    assert(buffer[2] == CMD_TTL);
+
+    if (bytes_read - 2 != command_len) {
+        fprintf(stderr, "Incomplete command data for TTL.\n");
+        send_error(client);
+        return;
+    }
+
+    // Lazy expiry: if expired, clean up before reporting TTL
+    check_and_expire(&buffer[5], key_len);
+
+    // Check if key exists in store at all
+    value_entry_t *val;
+    size_t val_len;
+    bool key_exists = get_value(table, &buffer[5], key_len, &val, &val_len);
+    if (key_exists) {
+        free(val->ptr);
+        free(val);
+    }
+
+    int64_t ttl;
+    if (!key_exists) {
+        ttl = -2;
+    } else {
+        ttl = get_ttl(expires, &buffer[5], key_len);
+        // get_ttl returns -2 if not in expires table; for existing key with no TTL, return -1
+        if (ttl == -2)
+            ttl = -1;
+    }
+
+    char ttl_str[32];
+    int n = snprintf(ttl_str, sizeof(ttl_str), "%lld", (long long)ttl);
+
+    send_reply(client, (const unsigned char *)ttl_str, n);
+}
+
+void handle_persist_command(client_t *client, unsigned char *buffer,
+                            size_t bytes_read)
+{
+    const size_t command_len = buffer[0] << 8 | buffer[1];
+    const size_t key_len = buffer[3] << 8 | buffer[4];
+
+    assert(buffer[2] == CMD_PERSIST);
+
+    if (bytes_read - 2 != command_len) {
+        fprintf(stderr, "Incomplete command data for PERSIST.\n");
+        send_error(client);
+        return;
+    }
+
+    remove_expiry(expires, &buffer[5], key_len);
+
+    send_ok(client);
 }

@@ -3,8 +3,9 @@
 
 #include "../../client.h"
 #include "../../core/hashtable.h"
+#include "../../server.h"
 
-void init_command_handlers(hashtable_t *ht);
+void init_command_handlers(db_t *db);
 
 void handle_set_command(client_t *client, unsigned char *buffer,
                         size_t bytes_read);
@@ -29,5 +30,17 @@ void handle_decr_by_command(client_t *client, unsigned char *buffer,
 
 void handle_info_command(client_t *client, unsigned char *buffer,
                          size_t bytes_read);
+
+void handle_del_command(client_t *client, unsigned char *buffer,
+                        size_t bytes_read);
+
+void handle_expire_command(client_t *client, unsigned char *buffer,
+                           size_t bytes_read);
+
+void handle_ttl_command(client_t *client, unsigned char *buffer,
+                        size_t bytes_read);
+
+void handle_persist_command(client_t *client, unsigned char *buffer,
+                            size_t bytes_read);
 
 #endif // SERVER_COMMAND_HANDLERS_H

@@ -83,7 +83,8 @@ void dispatch_command(client_t *client, unsigned char *buffer,
 
 void send_ok(client_t *client)
 {
-    const unsigned char ok[] = {STATUS_SUCCESS};
+    // Framed OK: [2B core_len=1] [1B STATUS_SUCCESS]
+    const unsigned char ok[] = {0x00, 0x01, STATUS_SUCCESS};
     assert(client->fd > 0);
     wbuf_append(client, ok, sizeof ok);
 }
