@@ -4,6 +4,7 @@
 #include "../common/command_defs.h"
 
 #include <assert.h>
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -39,10 +40,28 @@ static void wbuf_append(client_t *client, const unsigned char *data,
 
 void wbuf_flush(client_t *client)
 {
-    if (client->wbuf_used == 0)
-        return;
-    send(client->fd, client->wbuf, client->wbuf_used, 0);
-    client->wbuf_used = 0;
+    size_t sent = 0;
+    while (sent < client->wbuf_used) {
+        ssize_t n = send(client->fd, client->wbuf + sent,
+                         client->wbuf_used - sent, 0);
+        if (n > 0) {
+            sent += (size_t)n;
+        } else if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+            // Non-blocking socket can't accept more right now; keep unsent
+            // data in the buffer for a future flush.
+            break;
+        } else {
+            // Real error (e.g. EPIPE, ECONNRESET); discard buffer.
+            client->wbuf_used = 0;
+            return;
+        }
+    }
+
+    // Compact: shift unsent bytes to the front.
+    size_t remaining = client->wbuf_used - sent;
+    if (remaining > 0)
+        memmove(client->wbuf, client->wbuf + sent, remaining);
+    client->wbuf_used = remaining;
 }
 
 void dispatch_command(client_t *client, unsigned char *buffer,
@@ -71,7 +90,8 @@ void send_ok(client_t *client)
 
 void send_error(client_t *client)
 {
-    const unsigned char error[] = {STATUS_FAILURE};
+    // Framed error: [2B core_len=1] [1B STATUS_FAILURE]
+    const unsigned char error[] = {0x00, 0x01, STATUS_FAILURE};
     assert(client->fd > 0);
     wbuf_append(client, error, sizeof error);
 }

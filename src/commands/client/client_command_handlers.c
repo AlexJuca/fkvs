@@ -2,6 +2,7 @@
 #include "../../client.h"
 #include "../../commands/common/command_defs.h"
 #include "../../commands/common/command_parser.h"
+#include "../../response_defs.h"
 #include "../../keygen.h"
 #include "../../utils.h"
 
@@ -78,7 +79,7 @@ void cmd_set(const command_args_t args, void (*response_cb)(client_t *client))
 
 void cmd_incr(const command_args_t args, void (*response_cb)(client_t *client))
 {
-    if (strncasecmp(args.cmd, "INCR ", 4) != 0) {
+    if (strncasecmp(args.cmd, "INCR ", 5) != 0) {
         return;
     }
 
@@ -202,7 +203,7 @@ void cmd_info(const command_args_t args, void (*response_cb)(client_t *client))
 
 void cmd_decr(const command_args_t args, void (*response_cb)(client_t *client))
 {
-    if (strncasecmp(args.cmd, "DECR ", 4) != 0) {
+    if (strncasecmp(args.cmd, "DECR ", 5) != 0) {
         return;
     }
 
@@ -437,7 +438,11 @@ void command_response_handler(client_t *client)
             const uint16_t core_len =
                 ((uint16_t)client->buffer[0] << 8) | client->buffer[1];
             if (bytes_received > core_len) {
-                if (client->buffer[2] == CMD_INFO) {
+                if (client->buffer[2] == STATUS_FAILURE) {
+                    if (!client->benchmark_mode) {
+                        printf("(nil) \n");
+                    }
+                } else if (client->buffer[2] == CMD_INFO) {
                         const size_t value_len = client->buffer[0] << 8 | client->buffer[1];
                         char *data = malloc(value_len + 1);
                         if (data) {
@@ -462,6 +467,7 @@ void command_response_handler(client_t *client)
                     } else {
                         char *data = malloc(value_len + 1);
                         memcpy(data, &client->buffer[5], value_len);
+                        data[value_len] = '\0';
                         if (!client->benchmark_mode) {
                             printf("\"%s\" \n", data);
                         }
@@ -472,7 +478,8 @@ void command_response_handler(client_t *client)
                         client->buffer[3] << 8 | client->buffer[4];
                     char *data = malloc(value_len + 1);
                     memcpy(data, &client->buffer[5], value_len);
-                    if (strlen(data) == 0) {
+                    data[value_len] = '\0';
+                    if (value_len == 0) {
                         if (!client->benchmark_mode) {
                             printf("OK\n");
                         }
@@ -485,7 +492,8 @@ void command_response_handler(client_t *client)
                     free(data);
                 }
             }
-        } else {
+        } else if (bytes_received == 1 ||
+                   (bytes_received >= 3 && client->buffer[2] == STATUS_FAILURE)) {
             if (!client->benchmark_mode) {
                 printf("(nil) \n");
             }
