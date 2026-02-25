@@ -95,6 +95,12 @@ typedef struct client_t {
 ### 4. Zero-Copy and I/O Batching (~1.3-1.5x gain)
 **Expected: Push to 1M+ req/s**
 
+> **Important:** See [io_uring findings](io-uring-findings.md) for a detailed analysis
+> of why naive io_uring integration underperforms epoll and what architectural changes
+> are needed to realize gains. Key takeaway: fix the hashtable first (Phase 2) since
+> fkvs is CPU-bound, then redesign io_uring integration with batched SQE submission,
+> registered buffers, DeferTR, and zero-copy paths.
+
 **Current:**
 - Single `recv()` call per event
 - Single `send()` per response
@@ -212,7 +218,7 @@ void handle_set_command(int client_fd, unsigned char *buffer, size_t bytes_read)
 **Effort: 1 week**
 
 1. ✅ Full zero-copy parsing
-2. ✅ io_uring optimization (batch operations with SQ/CQ)
+2. ✅ io_uring optimization (batch operations with SQ/CQ) — see [io_uring findings](io-uring-findings.md) for detailed analysis of when and how to optimize io_uring based on VLDB 2026 research
 3. ✅ Protocol efficiency improvements
 4. ✅ Profile-guided optimization (PGO)
 5. ✅ Compiler optimizations (-march=native, LTO)
@@ -290,6 +296,8 @@ Run `perf record` to validate these assumptions.
 - Swiss Tables: https://abseil.io/about/design/swisstables
 - xxHash: https://github.com/Cyan4973/xxHash
 - Linux perf: https://perf.wiki.kernel.org/index.php/Tutorial
+- io_uring for High-Performance DBMSs (VLDB 2026): https://github.com/mjasny/vldb26-iouring
+- [io_uring findings for fkvs](io-uring-findings.md) -- detailed analysis with benchmark data
 
 ---
 
