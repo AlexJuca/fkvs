@@ -36,8 +36,7 @@ void handle_set_command(client_t *client, unsigned char *buffer, size_t bytes_re
 
     // Need at least: core_len(2) + cmd(1) + key_len(2)
     if (bytes_read < 5) {
-        const unsigned char fail[] = {STATUS_FAILURE};
-        (void)send(client->fd, fail, sizeof fail, 0);
+        send_error(client);
         fprintf(stderr, "Incomplete SET: header too short\n");
         return;
     }
@@ -46,8 +45,7 @@ void handle_set_command(client_t *client, unsigned char *buffer, size_t bytes_re
     const uint16_t core_len = ((uint16_t)buffer[0] << 8) | buffer[1];
     const size_t total_needed = (size_t)core_len + 2;
     if (bytes_read < total_needed) {
-        unsigned char fail[] = {STATUS_FAILURE};
-        (void)send(client->fd, fail, sizeof fail, 0);
+        send_error(client);
         fprintf(stderr,
                 "Incomplete SET: message shorter than advertised core_len\n");
         return;
@@ -55,8 +53,7 @@ void handle_set_command(client_t *client, unsigned char *buffer, size_t bytes_re
 
     assert(buffer[2] == CMD_SET);
     if (buffer[2] != CMD_SET) {
-        const unsigned char fail[] = {STATUS_FAILURE};
-        (void)send(client->fd, fail, sizeof fail, 0);
+        send_error(client);
         fprintf(stderr, "SET parse error: wrong command byte (%u)\n",
                 (unsigned)buffer[2]);
         return;
@@ -109,13 +106,13 @@ void handle_set_command(client_t *client, unsigned char *buffer, size_t bytes_re
         printf("Wrote %d bytes to database \n", value_len);
     }
 
-    if (!is_integer(&buffer[pos_value], value_len)) {
+    if (is_integer(&buffer[pos_value], value_len)) {
+        set_value(table, &buffer[pos_key], key_len, &buffer[pos_value],
+                  value_len, VALUE_ENTRY_TYPE_INT);
+    } else {
         set_value(table, &buffer[pos_key], key_len, &buffer[pos_value],
                   value_len, VALUE_ENTRY_TYPE_RAW);
     }
-
-    set_value(table, &buffer[pos_key], key_len, &buffer[pos_value], value_len,
-              VALUE_ENTRY_TYPE_INT);
 
     send_reply(client, &buffer[pos_value], value_len);
     free(data);
@@ -137,16 +134,20 @@ void handle_get_command(client_t *client, unsigned char *buffer, size_t bytes_re
             if (!resp_buffer) {
                 send_error(client);
                 perror("malloc failed");
-                free(buffer);
+                free(value->ptr);
+                free(value);
+                return;
             }
 
             memcpy(resp_buffer, value->ptr, value_len);
 
-            assert(resp_buffer != NULL);
             assert(client->fd > 0);
 
             resp_buffer[value_len] = '\0';
             send_reply(client, resp_buffer, value_len);
+            free(resp_buffer);
+            free(value->ptr);
+            free(value);
         } else {
             send_error(client);
         }
@@ -177,13 +178,22 @@ void handle_incr_command(client_t *client, unsigned char *buffer,
     size_t value_len;
 
     if (!get_value(table, &buffer[5], key_len, &value, &value_len)) {
-        send_error(client);
-        return;
+        const char *default_value = "0";
+        const size_t default_value_len = strlen(default_value);
+        if (!set_value(table, &buffer[5], key_len,
+                       (unsigned char *)default_value, default_value_len,
+                       VALUE_ENTRY_TYPE_INT)) {
+            fprintf(stderr, "Unable to set default value.\n");
+            send_error(client);
+            return;
+        }
+        get_value(table, &buffer[5], key_len, &value, &value_len);
     }
 
     if (value->encoding != VALUE_ENTRY_TYPE_INT) {
         fprintf(stderr, "Stored value is not an integer.\n");
         send_error(client);
+        free(value->ptr);
         free(value);
         return;
     }
@@ -204,11 +214,15 @@ void handle_incr_command(client_t *client, unsigned char *buffer,
         fprintf(stderr, "Unable to set incremented value.\n");
         send_error(client);
         free(reply);
+        free(value->ptr);
+        free(value);
         return;
     }
 
     send_reply(client, (const unsigned char *)reply, reply_len);
     free(reply);
+    free(value->ptr);
+    free(value);
 }
 
 void handle_incr_by_command(client_t *client, unsigned char *buffer,
@@ -220,7 +234,7 @@ void handle_incr_by_command(client_t *client, unsigned char *buffer,
     const size_t pos = key_position_offset + key_len;
     const size_t offset = 2;
 
-    assert(buffer[2] == CMD_INCR);
+    assert(buffer[2] == CMD_INCR_BY);
 
     if (pos + offset > bytes_read) {
         fprintf(stderr, "Invalid buffer: too short for value length.\n");
@@ -258,14 +272,25 @@ void handle_incr_by_command(client_t *client, unsigned char *buffer,
     value_entry_t *old_value;
     size_t old_value_len;
     if (!get_value(table, &buffer[5], key_len, &old_value, &old_value_len)) {
-        send_error(client);
-        return;
+        const char *default_value = "0";
+        const size_t default_value_len = strlen(default_value);
+        if (!set_value(table, &buffer[5], key_len,
+                       (unsigned char *)default_value, default_value_len,
+                       VALUE_ENTRY_TYPE_INT)) {
+            fprintf(stderr, "Unable to set default value.\n");
+            send_error(client);
+            free(incr_str);
+            return;
+        }
+        get_value(table, &buffer[5], key_len, &old_value, &old_value_len);
     }
 
     if (old_value->encoding != VALUE_ENTRY_TYPE_INT) {
         fprintf(stderr, "Stored value is not an integer.\n");
         send_error(client);
+        free(old_value->ptr);
         free(old_value);
+        free(incr_str);
         return;
     }
 
@@ -284,7 +309,9 @@ void handle_incr_by_command(client_t *client, unsigned char *buffer,
                    result_len, VALUE_ENTRY_TYPE_INT)) {
         fprintf(stderr, "Unable to set incremented value.\n");
         send_error(client);
+        free(old_value->ptr);
         free(old_value);
+        free(incr_str);
         return;
     }
 
@@ -292,7 +319,9 @@ void handle_incr_by_command(client_t *client, unsigned char *buffer,
     assert(result_len >= 1);
 
     send_reply(client, (unsigned char *)result, result_len);
+    free(old_value->ptr);
     free(old_value);
+    free(incr_str);
 }
 
 void handle_decr_by_command(client_t *client, unsigned char *buffer,
@@ -456,6 +485,7 @@ void handle_info_command(client_t *client, unsigned char *buffer,
     if (n < 0 || n >= sizeof(metrics)) {
         fprintf(stderr, "Formatting error or buffer overflow while preparing "
                         "metrics reply.\n");
+        send_error(client);
         return;
     }
 
@@ -482,13 +512,22 @@ void handle_decr_command(client_t *client, unsigned char *buffer,
     value_entry_t *value;
     size_t value_len;
     if (!get_value(table, &buffer[5], key_len, &value, &value_len)) {
-        send_error(client);
-        return;
+        const char *default_value = "0";
+        const size_t default_value_len = strlen(default_value);
+        if (!set_value(table, &buffer[5], key_len,
+                       (unsigned char *)default_value, default_value_len,
+                       VALUE_ENTRY_TYPE_INT)) {
+            fprintf(stderr, "Unable to set default value.\n");
+            send_error(client);
+            return;
+        }
+        get_value(table, &buffer[5], key_len, &value, &value_len);
     }
 
     if (!is_integer(value->ptr, value_len)) {
         fprintf(stderr, "Stored value is not an integer.\n");
         send_error(client);
+        free(value->ptr);
         free(value);
         return;
     }
@@ -503,13 +542,16 @@ void handle_decr_command(client_t *client, unsigned char *buffer,
 
     if (!set_value(table, &buffer[5], key_len, (unsigned char *)result_str,
                    result_length, VALUE_ENTRY_TYPE_INT)) {
-        fprintf(stderr, "Unable to set incremented value.\n");
+        fprintf(stderr, "Unable to set decremented value.\n");
         send_error(client);
+        free(value->ptr);
+        free(value);
         return;
     }
 
     assert(client->fd > 0);
 
     send_reply(client, (unsigned char *)result_str, result_length);
+    free(value->ptr);
     free(value);
 }
