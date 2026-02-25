@@ -117,6 +117,18 @@ static bool resp_is_ok(const unsigned char *resp, ssize_t len)
  * commands.                                                             *
  * ──────────────────────────────────────────────────────────────────── */
 
+static void assert_set_ex(fixture_t *f, const char *key, const char *value,
+                          const char *seconds, const char *expected)
+{
+    unsigned char resp[512];
+    size_t len;
+    unsigned char *cmd = construct_set_ex_command(key, value, seconds, &len);
+    assert(cmd);
+    ssize_t r = dispatch_and_recv(f, cmd, len, resp, sizeof resp);
+    free(cmd);
+    assert(r > 0 && resp_is_success(resp, r, expected));
+}
+
 static void assert_set(fixture_t *f, const char *key, const char *value,
                        const char *expected)
 {
@@ -760,6 +772,86 @@ static void test_set_after_expire_restores_key(void)
     printf("  test_set_after_expire_restores_key passed.\n");
 }
 
+/* ── SET EX tests ──────────────────────────────────────────────────── */
+
+static void test_set_ex_sets_ttl(void)
+{
+    fixture_t f = setup();
+
+    assert_set_ex(&f, "exkey", "val", "10", "val");
+
+    // TTL should return something around 9 or 10
+    unsigned char resp[512];
+    size_t len;
+    unsigned char *cmd = construct_ttl_command("exkey", &len);
+    assert(cmd);
+    ssize_t r = dispatch_and_recv(&f, cmd, len, resp, sizeof resp);
+    free(cmd);
+    assert(r > 0 && resp[2] == STATUS_SUCCESS);
+    size_t vlen = ((size_t)resp[3] << 8) | resp[4];
+    char buf[32];
+    assert(vlen < sizeof(buf));
+    memcpy(buf, &resp[5], vlen);
+    buf[vlen] = '\0';
+    long ttl = strtol(buf, NULL, 10);
+    assert(ttl >= 8 && ttl <= 10);
+
+    teardown(&f);
+    printf("  test_set_ex_sets_ttl passed.\n");
+}
+
+static void test_set_ex_value_accessible(void)
+{
+    fixture_t f = setup();
+
+    assert_set_ex(&f, "exval", "hello", "10", "hello");
+    assert_get(&f, "exval", "hello");
+
+    teardown(&f);
+    printf("  test_set_ex_value_accessible passed.\n");
+}
+
+static void test_set_ex_expires(void)
+{
+    fixture_t f = setup();
+
+    assert_set_ex(&f, "exexp", "temp", "1", "temp");
+
+    sleep(2);
+
+    assert_get_error(&f, "exexp");
+
+    teardown(&f);
+    printf("  test_set_ex_expires passed.\n");
+}
+
+static void test_set_ex_overwritten_by_set(void)
+{
+    fixture_t f = setup();
+
+    assert_set_ex(&f, "exover", "v1", "10", "v1");
+    // Plain SET should clear the TTL
+    assert_set(&f, "exover", "v2", "v2");
+    assert_ttl(&f, "exover", "-1");
+
+    teardown(&f);
+    printf("  test_set_ex_overwritten_by_set passed.\n");
+}
+
+static void test_set_ex_zero(void)
+{
+    fixture_t f = setup();
+
+    assert_set_ex(&f, "exzero", "gone", "0", "gone");
+
+    // Key should be expired on next access
+    assert_get_error(&f, "exzero");
+    assert_ttl(&f, "exzero", "-2");
+
+    teardown(&f);
+    printf("  test_set_ex_zero passed.\n");
+}
+
 /* ── main ──────────────────────────────────────────────────────────── */
 
 int main(void)
@@ -818,6 +910,13 @@ int main(void)
     /* Edge cases — key lifecycle */
     test_set_after_del_works();
     test_set_after_expire_restores_key();
+
+    /* SET EX (atomic SET with TTL) */
+    test_set_ex_sets_ttl();
+    test_set_ex_value_accessible();
+    test_set_ex_expires();
+    test_set_ex_overwritten_by_set();
+    test_set_ex_zero();
 
     printf("All integration tests passed.\n");
     return 0;

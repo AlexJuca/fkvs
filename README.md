@@ -94,7 +94,7 @@ $ ./fkvs-cli -h 127.0.0.1 -p 5995 --non-interactive
 
 | Command | Usage | Description |
 |---|---|---|
-| `SET` | `SET key value` | Store a key-value pair |
+| `SET` | `SET key value [EX seconds]` | Store a key-value pair, optionally setting a TTL atomically |
 | `GET` | `GET key` | Retrieve the value of a key |
 | `DEL` | `DEL key` | Delete a key |
 | `INCR` | `INCR key` | Increment the integer value of a key by 1 |

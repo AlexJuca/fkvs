@@ -129,8 +129,41 @@ void handle_set_command(client_t *client, unsigned char *buffer, size_t bytes_re
                   value_len, VALUE_ENTRY_TYPE_RAW);
     }
 
-    // SET clears any existing TTL (matching Redis behavior)
-    remove_expiry(expires, &buffer[pos_key], key_len);
+    // Check for optional inline EX (extra bytes after value in core)
+    if (core_payload_size < core_len) {
+        // Parse [ex_len:2][ex_str]
+        const size_t ex_offset = end_value;
+        if (ex_offset + 2 > bytes_read) {
+            send_error(client);
+            fprintf(stderr, "Incomplete SET EX: missing ex_len\n");
+            free(data);
+            return;
+        }
+
+        const uint16_t ex_len =
+            ((uint16_t)buffer[ex_offset] << 8) | buffer[ex_offset + 1];
+        const size_t pos_ex = ex_offset + 2;
+
+        if (pos_ex + ex_len > bytes_read) {
+            send_error(client);
+            fprintf(stderr, "Incomplete SET EX: ex bytes exceed bounds\n");
+            free(data);
+            return;
+        }
+
+        char sec_buf[32];
+        size_t copy_len =
+            ex_len < sizeof(sec_buf) - 1 ? ex_len : sizeof(sec_buf) - 1;
+        memcpy(sec_buf, &buffer[pos_ex], copy_len);
+        sec_buf[copy_len] = '\0';
+
+        int64_t seconds = strtoll(sec_buf, NULL, 10);
+        int64_t deadline_ms = fkvs_now_ms() + seconds * 1000;
+        set_expiry(expires, &buffer[pos_key], key_len, deadline_ms);
+    } else {
+        // SET clears any existing TTL (matching Redis behavior)
+        remove_expiry(expires, &buffer[pos_key], key_len);
+    }
 
     send_reply(client, &buffer[pos_value], value_len);
     free(data);

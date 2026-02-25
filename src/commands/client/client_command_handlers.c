@@ -54,16 +54,25 @@ void cmd_set(const command_args_t args, void (*response_cb)(client_t *client))
 
     char value[MAX_VALUE_LEN];
     char key[MAX_KEY_LEN];
-    if (sscanf(args.cmd, "SET %511s %511s", key, value) == 2) {
+    char ex_keyword[4];
+    char seconds[MAX_VALUE_LEN];
 
+    size_t cmd_len;
+    unsigned char *binary_cmd = NULL;
+
+    int nfields = sscanf(args.cmd, "SET %511s %511s %3s %511s", key, value,
+                         ex_keyword, seconds);
+
+    if (nfields == 4 && strcasecmp(ex_keyword, "EX") == 0) {
+        binary_cmd = construct_set_ex_command(key, value, seconds, &cmd_len);
+    } else if (nfields == 2) {
+        binary_cmd = construct_set_command(key, value, &cmd_len);
     } else {
-        printf("(error) ERR wrong number of arguments for 'set' command\n");
-        printf("(info) Usage: SET <key> <value>\n");
+        printf("(error) ERR syntax error in 'set' command\n");
+        printf("(info) Usage: SET <key> <value> [EX seconds]\n");
         return;
     }
 
-    size_t cmd_len;
-    unsigned char *binary_cmd = construct_set_command(key, value, &cmd_len);
     if (binary_cmd == NULL) {
         fprintf(stderr, "Failed to construct SET command\n");
         return;

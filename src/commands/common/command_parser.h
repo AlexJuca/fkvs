@@ -9,6 +9,10 @@ void handle_command(hashtable_t *table, int client_fd,
 unsigned char *construct_set_command(const char *key, const char *value,
                                      size_t *command_len);
 
+unsigned char *construct_set_ex_command(const char *key, const char *value,
+                                        const char *seconds,
+                                        size_t *command_len);
+
 unsigned char *construct_get_command(const char *key, size_t *command_len);
 
 unsigned char *construct_incr_command(const char *key, size_t *command_len);
