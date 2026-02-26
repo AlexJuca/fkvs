@@ -34,6 +34,7 @@ bool set_value(const hashtable_t *table, const unsigned char *key,
                int value_type);
 bool get_value(hashtable_t *table, unsigned char *key, size_t key_len,
                value_entry_t **value, size_t *value_len);
+bool delete_value(hashtable_t *table, const unsigned char *key, size_t key_len);
 size_t hash_function(const unsigned char *key, size_t key_len,
                      size_t table_size);
 

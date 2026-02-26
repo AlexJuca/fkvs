@@ -90,14 +90,32 @@ $ ./fkvs-cli -h 127.0.0.1 -p 5995 --non-interactive
 
 ### Supported commands
 
-- PING | PING "value"
-- SET key value
-- GET key
-- INCR key
-- INCRBY key value
-- DECR key
-- DECRBY key value
-- INFO
+#### Strings
+
+| Command | Usage | Description |
+|---|---|---|
+| `SET` | `SET key value [EX seconds]` | Store a key-value pair, optionally setting a TTL atomically |
+| `GET` | `GET key` | Retrieve the value of a key |
+| `DEL` | `DEL key` | Delete a key |
+| `INCR` | `INCR key` | Increment the integer value of a key by 1 |
+| `INCRBY` | `INCRBY key amount` | Increment the integer value of a key by a given amount |
+| `DECR` | `DECR key` | Decrement the integer value of a key by 1 |
+| `DECRBY` | `DECRBY key amount` | Decrement the integer value of a key by a given amount |
+
+#### Expiration (TTL)
+
+| Command | Usage | Description |
+|---|---|---|
+| `EXPIRE` | `EXPIRE key seconds` | Set a timeout on a key (in seconds) |
+| `TTL` | `TTL key` | Get the remaining time-to-live of a key (-1 = no TTL, -2 = key missing) |
+| `PERSIST` | `PERSIST key` | Remove the timeout from a key |
+
+#### Server
+
+| Command | Usage | Description |
+|---|---|---|
+| `PING` | `PING` or `PING value` | Test connectivity; returns `PONG` or echoes the value |
+| `INFO` | `INFO` | Display server statistics (uptime, memory, connected clients) |
 
 ## Documentation
 

@@ -54,16 +54,25 @@ void cmd_set(const command_args_t args, void (*response_cb)(client_t *client))
 
     char value[MAX_VALUE_LEN];
     char key[MAX_KEY_LEN];
-    if (sscanf(args.cmd, "SET %511s %511s", key, value) == 2) {
+    char ex_keyword[4];
+    char seconds[MAX_VALUE_LEN];
 
+    size_t cmd_len;
+    unsigned char *binary_cmd = NULL;
+
+    int nfields = sscanf(args.cmd, "SET %511s %511s %3s %511s", key, value,
+                         ex_keyword, seconds);
+
+    if (nfields == 4 && strcasecmp(ex_keyword, "EX") == 0) {
+        binary_cmd = construct_set_ex_command(key, value, seconds, &cmd_len);
+    } else if (nfields == 2) {
+        binary_cmd = construct_set_command(key, value, &cmd_len);
     } else {
-        printf("(error) ERR wrong number of arguments for 'set' command\n");
-        printf("(info) Usage: SET <key> <value>\n");
+        printf("(error) ERR syntax error in 'set' command\n");
+        printf("(info) Usage: SET <key> <value> [EX seconds]\n");
         return;
     }
 
-    size_t cmd_len;
-    unsigned char *binary_cmd = construct_set_command(key, value, &cmd_len);
     if (binary_cmd == NULL) {
         fprintf(stderr, "Failed to construct SET command\n");
         return;
@@ -263,6 +272,119 @@ void cmd_decr_by(const command_args_t args,
     response_cb(args.client);
 }
 
+void cmd_del(const command_args_t args, void (*response_cb)(client_t *client))
+{
+    if (strncasecmp(args.cmd, "DEL ", 4) != 0) {
+        return;
+    }
+
+    char key[MAX_KEY_LEN];
+    if (sscanf(args.cmd, "DEL %511s", key) != 1) {
+        printf("(error) ERR wrong number of arguments for 'del' command\n");
+        printf("(info) Usage: DEL <key>\n");
+        return;
+    }
+
+    size_t cmd_len;
+    unsigned char *binary_cmd = construct_del_command(key, &cmd_len);
+    if (binary_cmd == NULL) {
+        fprintf(stderr, "Failed to construct DEL command\n");
+        return;
+    }
+
+    assert(cmd_len > 0);
+    assert(args.client->fd > 0);
+
+    send(args.client->fd, binary_cmd, cmd_len, 0);
+    free(binary_cmd);
+    response_cb(args.client);
+}
+
+void cmd_expire(const command_args_t args, void (*response_cb)(client_t *client))
+{
+    if (strncasecmp(args.cmd, "EXPIRE ", 7) != 0) {
+        return;
+    }
+
+    char key[MAX_KEY_LEN];
+    char seconds[MAX_VALUE_LEN];
+    if (sscanf(args.cmd, "EXPIRE %511s %511s", key, seconds) != 2) {
+        printf("(error) ERR wrong number of arguments for 'expire' command\n");
+        printf("(info) Usage: EXPIRE <key> <seconds>\n");
+        return;
+    }
+
+    size_t cmd_len;
+    unsigned char *binary_cmd = construct_expire_command(key, seconds, &cmd_len);
+    if (binary_cmd == NULL) {
+        fprintf(stderr, "Failed to construct EXPIRE command\n");
+        return;
+    }
+
+    assert(cmd_len > 0);
+    assert(args.client->fd > 0);
+
+    send(args.client->fd, binary_cmd, cmd_len, 0);
+    free(binary_cmd);
+    response_cb(args.client);
+}
+
+void cmd_ttl(const command_args_t args, void (*response_cb)(client_t *client))
+{
+    if (strncasecmp(args.cmd, "TTL ", 4) != 0) {
+        return;
+    }
+
+    char key[MAX_KEY_LEN];
+    if (sscanf(args.cmd, "TTL %511s", key) != 1) {
+        printf("(error) ERR wrong number of arguments for 'ttl' command\n");
+        printf("(info) Usage: TTL <key>\n");
+        return;
+    }
+
+    size_t cmd_len;
+    unsigned char *binary_cmd = construct_ttl_command(key, &cmd_len);
+    if (binary_cmd == NULL) {
+        fprintf(stderr, "Failed to construct TTL command\n");
+        return;
+    }
+
+    assert(cmd_len > 0);
+    assert(args.client->fd > 0);
+
+    send(args.client->fd, binary_cmd, cmd_len, 0);
+    free(binary_cmd);
+    response_cb(args.client);
+}
+
+void cmd_persist(const command_args_t args, void (*response_cb)(client_t *client))
+{
+    if (strncasecmp(args.cmd, "PERSIST ", 8) != 0) {
+        return;
+    }
+
+    char key[MAX_KEY_LEN];
+    if (sscanf(args.cmd, "PERSIST %511s", key) != 1) {
+        printf("(error) ERR wrong number of arguments for 'persist' command\n");
+        printf("(info) Usage: PERSIST <key>\n");
+        return;
+    }
+
+    size_t cmd_len;
+    unsigned char *binary_cmd = construct_persist_command(key, &cmd_len);
+    if (binary_cmd == NULL) {
+        fprintf(stderr, "Failed to construct PERSIST command\n");
+        return;
+    }
+
+    assert(cmd_len > 0);
+    assert(args.client->fd > 0);
+
+    send(args.client->fd, binary_cmd, cmd_len, 0);
+    free(binary_cmd);
+    response_cb(args.client);
+}
+
 /*
  * TODO: This approach works but is cumbersome to maintain. For future
  * reference, lets implement a solution that doesn't require us to have a
@@ -278,7 +400,11 @@ void cmd_unknown(const command_args_t args,
         strncmp(args.cmd, "PING", 4) &&
         strncmp(args.cmd, "PING ", 5) &&
         strncmp(args.cmd, "DECR ", 5) &&
-		strncmp(args.cmd, "DECRBY ", 7) &&
+        strncmp(args.cmd, "DECRBY ", 7) &&
+        strncmp(args.cmd, "DEL ", 4) &&
+        strncmp(args.cmd, "EXPIRE ", 7) &&
+        strncmp(args.cmd, "TTL ", 4) &&
+        strncmp(args.cmd, "PERSIST ", 8) &&
         strncmp(args.cmd, "INFO", 5)) {
         printf("Unknown command \n");
     }
@@ -286,9 +412,11 @@ void cmd_unknown(const command_args_t args,
 
 const cmd_t command_table[] = {
     {"cmd_set", cmd_set},         {"cmd_get", cmd_get},
-    {"cmd_decr", cmd_decr},		  {"cmd_decr_by", cmd_decr_by},
+    {"cmd_decr", cmd_decr},       {"cmd_decr_by", cmd_decr_by},
     {"cmd_incr", cmd_incr},
     {"cmd_incr_by", cmd_incr_by}, {"cmd_ping", cmd_ping},
+    {"cmd_del", cmd_del},         {"cmd_expire", cmd_expire},
+    {"cmd_ttl", cmd_ttl},         {"cmd_persist", cmd_persist},
     {"cmd_unknown", cmd_unknown},
     {"cmd_info", cmd_info}};
 

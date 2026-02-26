@@ -46,6 +46,14 @@ void cmd_info(command_args_t args, void (*response_cb)(client_t *client));
 
 void cmd_unknown(command_args_t args, void (*response_cb)(client_t *client));
 
+void cmd_del(command_args_t args, void (*response_cb)(client_t *client));
+
+void cmd_expire(command_args_t args, void (*response_cb)(client_t *client));
+
+void cmd_ttl(command_args_t args, void (*response_cb)(client_t *client));
+
+void cmd_persist(command_args_t args, void (*response_cb)(client_t *client));
+
 void command_response_handler(client_t *client);
 
 #endif // CLIENT_COMMAND_HANDLERS

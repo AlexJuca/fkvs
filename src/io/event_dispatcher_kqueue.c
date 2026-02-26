@@ -4,6 +4,7 @@
 #include "../core/list.h"
 #include "../networking/networking.h"
 #include "../server.h"
+#include "../ttl.h"
 #include "../utils.h"
 #include "event_dispatcher.h"
 #include <errno.h>
@@ -67,6 +68,14 @@ int run_event_loop()
         return -1;
     }
 
+    // Register a 100ms timer for active key expiration sweep
+    // EVFILT_TIMER default unit is milliseconds on macOS
+    struct kevent timer_ev;
+    EV_SET(&timer_ev, 1, EVFILT_TIMER, EV_ADD | EV_ENABLE, 0, 100, NULL);
+    if (kevent(kq, &timer_ev, 1, NULL, 0, NULL) == -1) {
+        perror("kevent register (timer)");
+    }
+
     struct kevent evs[server.event_loop_max_events];
 
     for (;;) {
@@ -82,6 +91,13 @@ int run_event_loop()
         // We have new events
         for (int i = 0; i < n; i++) {
             const int ident_fd = (int)evs[i].ident;
+
+            // Timer event for active expiration sweep
+            if (evs[i].filter == EVFILT_TIMER) {
+                expire_sweep(server.database->store, server.database->expires,
+                             20);
+                continue;
+            }
 
             // New connection on the server listening socket.
             if (ident_fd == server.fd) {

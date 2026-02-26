@@ -9,5 +9,9 @@
 #define CMD_DECR 0x06
 #define CMD_INFO 0x07
 #define CMD_DECR_BY 0x08
+#define CMD_DEL     0x09
+#define CMD_EXPIRE  0x0A
+#define CMD_TTL     0x0B
+#define CMD_PERSIST 0x0C
 
 #endif // COMMAND_DEFS_H

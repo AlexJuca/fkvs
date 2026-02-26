@@ -4,6 +4,7 @@
 #include "../networking/modes.h"
 #include "../networking/networking.h"
 #include "../server.h"
+#include "../ttl.h"
 #include "../utils.h"
 #include "event_dispatcher.h"
 
@@ -17,6 +18,7 @@
 #include <string.h>
 #include <sys/epoll.h>
 #include <sys/socket.h>
+#include <sys/timerfd.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -68,6 +70,22 @@ int run_event_loop()
         return -1;
     }
 
+    // Create a 100ms timerfd for active key expiration sweep
+    int tfd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
+    if (tfd >= 0) {
+        struct itimerspec its = {
+            .it_interval = {0, 100000000}, // 100ms
+            .it_value = {0, 100000000}     // 100ms
+        };
+        timerfd_settime(tfd, 0, &its, NULL);
+
+        struct epoll_event tev;
+        memset(&tev, 0, sizeof(tev));
+        tev.events = EPOLLIN;
+        tev.data.fd = tfd;
+        epoll_ctl(epfd, EPOLL_CTL_ADD, tfd, &tev);
+    }
+
     struct epoll_event events[server.event_loop_max_events];
 
     for (;;) {
@@ -82,6 +100,15 @@ int run_event_loop()
 
         for (int i = 0; i < n; i++) {
             const uint32_t evt = events[i].events;
+
+            // Timer event for active expiration sweep
+            if (tfd >= 0 && events[i].data.fd == tfd) {
+                uint64_t expirations;
+                read(tfd, &expirations, sizeof(expirations));
+                expire_sweep(server.database->store,
+                             server.database->expires, 20);
+                continue;
+            }
 
             // New connections on the listening socket
             if (events[i].data.fd == server.fd) {

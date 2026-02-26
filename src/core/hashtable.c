@@ -120,6 +120,39 @@ bool set_value(const hashtable_t *table, const unsigned char *key,
     return true;
 }
 
+bool delete_value(hashtable_t *table, const unsigned char *key, size_t key_len)
+{
+    if (!table || !key)
+        return false;
+
+    const size_t index = hash_function(key, key_len, table->size);
+    hash_table_entry_t *current = table->buckets[index];
+    hash_table_entry_t *prev = NULL;
+
+    while (current != NULL) {
+        if (current->key_len == key_len &&
+            memcmp(current->key, key, key_len) == 0) {
+            // Unlink from chain
+            if (prev) {
+                prev->next = current->next;
+            } else {
+                table->buckets[index] = current->next;
+            }
+            free(current->key);
+            if (current->value) {
+                free(current->value->ptr);
+                free(current->value);
+            }
+            free(current);
+            return true;
+        }
+        prev = current;
+        current = current->next;
+    }
+
+    return false;
+}
+
 bool get_value(hashtable_t *table, unsigned char *key, size_t key_len,
                value_entry_t **value, size_t *value_len)
 {
