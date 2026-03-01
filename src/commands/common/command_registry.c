@@ -117,6 +117,26 @@ void send_reply(client_t *client, const unsigned char *buffer,
     wbuf_append(client, frame, full_frame_length);
 }
 
+void send_keys_reply(client_t *client, const unsigned char *data,
+                     size_t data_len)
+{
+    const size_t core_cmd_len = 1 + 2 + data_len;
+    const size_t full_frame_length = 2 + core_cmd_len;
+
+    unsigned char frame[65536];
+    assert(full_frame_length <= sizeof(frame));
+
+    frame[0] = (core_cmd_len >> 8) & 0xFF;
+    frame[1] = core_cmd_len & 0xFF;
+    frame[2] = CMD_KEYS;
+    frame[3] = (data_len >> 8) & 0xFF;
+    frame[4] = data_len & 0xFF;
+    memcpy(&frame[5], data, data_len);
+
+    assert(client->fd > 0);
+    wbuf_append(client, frame, full_frame_length);
+}
+
 void send_pong(client_t *client, const unsigned char *buffer)
 {
     const size_t value_len = buffer[3] << 8 | buffer[4];

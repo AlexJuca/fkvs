@@ -116,6 +116,7 @@ $ ./fkvs-cli -h 127.0.0.1 -p 5995 --non-interactive
 |---|---|---|
 | `PING` | `PING` or `PING value` | Test connectivity; returns `PONG` or echoes the value |
 | `INFO` | `INFO` | Display server statistics (uptime, memory, connected clients) |
+| `KEYS` | `KEYS` | List all stored keys |
 
 ## Documentation
 

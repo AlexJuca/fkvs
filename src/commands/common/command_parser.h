@@ -37,4 +37,6 @@ unsigned char *construct_ttl_command(const char *key, size_t *command_len);
 
 unsigned char *construct_persist_command(const char *key, size_t *command_len);
 
+unsigned char *construct_keys_command(size_t *command_len);
+
 #endif // COMMAND_PARSER_H

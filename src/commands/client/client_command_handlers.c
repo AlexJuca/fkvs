@@ -385,6 +385,27 @@ void cmd_persist(const command_args_t args, void (*response_cb)(client_t *client
     response_cb(args.client);
 }
 
+void cmd_keys(const command_args_t args, void (*response_cb)(client_t *client))
+{
+    if (strncasecmp(args.cmd, "KEYS", 4) != 0) {
+        return;
+    }
+
+    size_t cmd_len;
+    unsigned char *keys_cmd = construct_keys_command(&cmd_len);
+    if (!keys_cmd) {
+        fprintf(stderr, "Failed to construct KEYS command\n");
+        return;
+    }
+
+    assert(cmd_len > 0);
+    assert(args.client->fd > 0);
+
+    send(args.client->fd, keys_cmd, cmd_len, 0);
+    free(keys_cmd);
+    response_cb(args.client);
+}
+
 /*
  * TODO: This approach works but is cumbersome to maintain. For future
  * reference, lets implement a solution that doesn't require us to have a
@@ -405,7 +426,8 @@ void cmd_unknown(const command_args_t args,
         strncmp(args.cmd, "EXPIRE ", 7) &&
         strncmp(args.cmd, "TTL ", 4) &&
         strncmp(args.cmd, "PERSIST ", 8) &&
-        strncmp(args.cmd, "INFO", 5)) {
+        strncmp(args.cmd, "INFO", 5) &&
+        strncmp(args.cmd, "KEYS", 4)) {
         printf("Unknown command \n");
     }
 }
@@ -418,7 +440,8 @@ const cmd_t command_table[] = {
     {"cmd_del", cmd_del},         {"cmd_expire", cmd_expire},
     {"cmd_ttl", cmd_ttl},         {"cmd_persist", cmd_persist},
     {"cmd_unknown", cmd_unknown},
-    {"cmd_info", cmd_info}};
+    {"cmd_info", cmd_info},
+    {"cmd_keys", cmd_keys}};
 
 void execute_command(const char *cmd, client_t *client,
                      void (*response_cb)(client_t *client))
@@ -580,6 +603,21 @@ void command_response_handler(client_t *client)
                             free(data);
                         } else {
                             printf("Memory allocation failed\n");
+                        }
+
+                    } else if (client->buffer[2] == CMD_KEYS) {
+                        const size_t value_len =
+                            client->buffer[3] << 8 | client->buffer[4];
+                        if (value_len == 0) {
+                            printf("(empty list)\n");
+                        } else {
+                            char *data = malloc(value_len + 1);
+                            if (data) {
+                                memcpy(data, &client->buffer[5], value_len);
+                                data[value_len] = '\0';
+                                printf("%s\n", data);
+                                free(data);
+                            }
                         }
 
                     } else if (client->buffer[2] == CMD_PING) {

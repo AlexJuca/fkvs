@@ -327,3 +327,21 @@ unsigned char *construct_persist_command(const char *key, size_t *command_len)
 
     return binary_cmd;
 }
+
+unsigned char *construct_keys_command(size_t *command_len)
+{
+    const size_t core_cmd_len = 1;
+    *command_len = 2 + core_cmd_len;
+
+    unsigned char *binary_cmd = malloc(*command_len);
+    if (!binary_cmd) {
+        return NULL;
+    }
+
+    binary_cmd[0] = core_cmd_len >> 8 & 0xFF;
+    binary_cmd[1] = core_cmd_len & 0xFF;
+
+    binary_cmd[2] = CMD_KEYS;
+
+    return binary_cmd;
+}
