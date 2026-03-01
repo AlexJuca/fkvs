@@ -852,6 +852,135 @@ static void test_set_ex_zero(void)
     printf("  test_set_ex_zero passed.\n");
 }
 
+/* ── KEYS helpers ──────────────────────────────────────────────────── */
+
+/** Dispatch KEYS and return raw response. */
+static ssize_t dispatch_keys(fixture_t *f, unsigned char *resp,
+                              size_t resp_size)
+{
+    size_t len;
+    unsigned char *cmd = construct_keys_command(&len);
+    assert(cmd);
+    ssize_t r = dispatch_and_recv(f, cmd, len, resp, resp_size);
+    free(cmd);
+    return r;
+}
+
+/** Check that a KEYS response has CMD_KEYS tag and the given value_len. */
+static bool resp_is_keys(const unsigned char *resp, ssize_t len,
+                          size_t *out_value_len)
+{
+    if (len < 5)
+        return false;
+    if (resp[2] != CMD_KEYS)
+        return false;
+    *out_value_len = ((size_t)resp[3] << 8) | resp[4];
+    return true;
+}
+
+/* ── KEYS tests ────────────────────────────────────────────────────── */
+
+static void test_keys_empty_store(void)
+{
+    fixture_t f = setup();
+
+    unsigned char resp[4096];
+    ssize_t r = dispatch_keys(&f, resp, sizeof resp);
+
+    size_t value_len;
+    assert(r > 0 && resp_is_keys(resp, r, &value_len));
+    assert(value_len == 0);
+
+    teardown(&f);
+    printf("  test_keys_empty_store passed.\n");
+}
+
+static void test_keys_returns_stored_keys(void)
+{
+    fixture_t f = setup();
+
+    assert_set(&f, "foo", "bar", "bar");
+    assert_set(&f, "hello", "world", "world");
+
+    unsigned char resp[4096];
+    ssize_t r = dispatch_keys(&f, resp, sizeof resp);
+
+    size_t value_len;
+    assert(r > 0 && resp_is_keys(resp, r, &value_len));
+    assert(value_len > 0);
+
+    // Parse the response body to verify both keys are listed
+    char *body = malloc(value_len + 1);
+    assert(body);
+    memcpy(body, &resp[5], value_len);
+    body[value_len] = '\0';
+
+    assert(strstr(body, "foo") != NULL);
+    assert(strstr(body, "hello") != NULL);
+
+    free(body);
+    teardown(&f);
+    printf("  test_keys_returns_stored_keys passed.\n");
+}
+
+static void test_keys_excludes_expired(void)
+{
+    fixture_t f = setup();
+
+    assert_set(&f, "persist_key", "val", "val");
+    assert_set(&f, "temp_key", "val", "val");
+    assert_expire_ok(&f, "temp_key", "1");
+
+    sleep(2);
+
+    unsigned char resp[4096];
+    ssize_t r = dispatch_keys(&f, resp, sizeof resp);
+
+    size_t value_len;
+    assert(r > 0 && resp_is_keys(resp, r, &value_len));
+    assert(value_len > 0);
+
+    char *body = malloc(value_len + 1);
+    assert(body);
+    memcpy(body, &resp[5], value_len);
+    body[value_len] = '\0';
+
+    assert(strstr(body, "persist_key") != NULL);
+    assert(strstr(body, "temp_key") == NULL);
+
+    free(body);
+    teardown(&f);
+    printf("  test_keys_excludes_expired passed.\n");
+}
+
+static void test_keys_after_del(void)
+{
+    fixture_t f = setup();
+
+    assert_set(&f, "a", "1", "1");
+    assert_set(&f, "b", "2", "2");
+    assert_del_ok(&f, "a");
+
+    unsigned char resp[4096];
+    ssize_t r = dispatch_keys(&f, resp, sizeof resp);
+
+    size_t value_len;
+    assert(r > 0 && resp_is_keys(resp, r, &value_len));
+    assert(value_len > 0);
+
+    char *body = malloc(value_len + 1);
+    assert(body);
+    memcpy(body, &resp[5], value_len);
+    body[value_len] = '\0';
+
+    assert(strstr(body, "b") != NULL);
+    assert(strstr(body, "a") == NULL);
+
+    free(body);
+    teardown(&f);
+    printf("  test_keys_after_del passed.\n");
+}
+
 /* ── main ──────────────────────────────────────────────────────────── */
 
 int main(void)
@@ -917,6 +1046,12 @@ int main(void)
     test_set_ex_expires();
     test_set_ex_overwritten_by_set();
     test_set_ex_zero();
+
+    /* KEYS */
+    test_keys_empty_store();
+    test_keys_returns_stored_keys();
+    test_keys_excludes_expired();
+    test_keys_after_del();
 
     printf("All integration tests passed.\n");
     return 0;
