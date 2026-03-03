@@ -4,6 +4,7 @@
 #include "../networking/modes.h"
 #include "../networking/networking.h"
 #include "../server.h"
+#include "../persistence/persistence.h"
 #include "../ttl.h"
 #include "../utils.h"
 #include "event_dispatcher.h"
@@ -80,6 +81,9 @@ int run_event_loop()
             break;
         }
 
+        if (server.shutdown_requested)
+            shutdown_server();
+
         client_t *c = io_uring_cqe_get_data(cqe);
 
         // Handle timer expiration for active sweep
@@ -87,6 +91,17 @@ int run_event_loop()
             if (cqe->res > 0) {
                 expire_sweep(server.database->store,
                              server.database->expires, 20);
+                if (server.save_interval > 0 &&
+                    server.dirty >=
+                        (uint64_t)server.save_changes_threshold) {
+                    server.save_tick_count++;
+                    if (server.save_tick_count >=
+                        server.save_interval * 10) {
+                        save_snapshot(server.database, server.snapshot_path);
+                        server.dirty = 0;
+                        server.save_tick_count = 0;
+                    }
+                }
             }
             // Re-arm the timer read
             struct io_uring_sqe *sqe = io_uring_get_sqe(&ring);

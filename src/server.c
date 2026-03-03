@@ -5,6 +5,7 @@
 #include "counter.h"
 #include "io/event_dispatcher.h"
 #include "networking/networking.h"
+#include "persistence/persistence.h"
 #include "utils.h"
 #include <errno.h>
 #include <fcntl.h>
@@ -84,8 +85,22 @@ void print_version_and_exit()
 
 void handle_sigint(int sig)
 {
-    LOG_INFO("Caught signal interrupt, shutting down server.");
-    // Ensure we close all client connections
+    server.shutdown_requested = 1;
+}
+
+void shutdown_server(void)
+{
+    LOG_INFO("Shutting down server...");
+
+    if (server.save_interval > 0) {
+        LOG_INFO("Saving snapshot before shutdown...");
+        if (save_snapshot(server.database, server.snapshot_path)) {
+            LOG_INFO("Snapshot saved successfully.");
+        } else {
+            LOG_INFO("Failed to save snapshot.");
+        }
+    }
+
     const list_node_t *current = server.clients->head;
     while (current != NULL) {
         close((intptr_t)current->val);
@@ -95,8 +110,8 @@ void handle_sigint(int sig)
     listEmpty(server.clients);
     server.num_clients = 0;
 
-    free(server.database->expires);
-    free(server.database->store);
+    free_hash_table(server.database->expires);
+    free_hash_table(server.database->store);
     free(server.database);
 
     close(server.fd);
@@ -174,6 +189,12 @@ int main(int argc, char *argv[])
     server.database = malloc(sizeof(db_t));
     server.database->store = create_hash_table(TABLE_SIZE);
     server.database->expires = create_hash_table(TABLE_SIZE);
+
+    if (server.save_interval > 0) {
+        if (load_snapshot(server.snapshot_path, server.database)) {
+            LOG_INFO("Snapshot loaded successfully.");
+        }
+    }
 
     init_command_handlers(server.database);
 
