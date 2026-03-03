@@ -21,6 +21,12 @@ server_t load_server_config(const char *path)
     server.num_clients = 0;
     server.uds_socket_path = NULL;
     server.socket_domain = TCP_IP;
+    server.save_interval = 300;
+    server.save_changes_threshold = 1;
+    server.save_tick_count = 0;
+    server.dirty = 0;
+    server.shutdown_requested = 0;
+    server.snapshot_path = "fkvs-dump.rdb";
     if (path) {
         server.config_file_path = path;
     } else {
@@ -91,6 +97,18 @@ server_t load_server_config(const char *path)
                     ERROR_AND_EXIT("'log-enabled' expects a truthy value.");
                 }
             }
+        }
+
+        if (strcmp(key, "save-interval") == 0) {
+            server.save_interval = atoi(value);
+            char changes[512];
+            if (sscanf(line, "%*s %*s %s", changes) == 1) {
+                server.save_changes_threshold = atoi(changes);
+            }
+        }
+
+        if (strcmp(key, "snapshot-path") == 0) {
+            server.snapshot_path = strdup(value);
         }
 
         if (strcmp(key, "use-io-uring") == 0) {

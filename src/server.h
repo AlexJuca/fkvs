@@ -6,7 +6,9 @@
 #include "counter.h"
 #include "io/event_dispatcher.h"
 #include "networking/modes.h"
+#include <signal.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <sys/types.h>
 
 typedef struct {
@@ -35,7 +37,15 @@ typedef struct server_t {
     bool verbose;
     bool show_logo;
     bool daemonize;
+    int save_interval;
+    int save_changes_threshold;
+    int save_tick_count;
+    uint64_t dirty;
+    volatile sig_atomic_t shutdown_requested;
+    char *snapshot_path;
 } server_t __attribute__((aligned(128)));
 ;
+
+void shutdown_server(void);
 
 #endif // SERVER_H

@@ -15,6 +15,7 @@
 
 #ifdef SERVER
 
+#include "../commands/common/command_defs.h"
 #include "../commands/common/command_registry.h"
 #include "../counter.h"
 #include <errno.h>
@@ -171,8 +172,16 @@ void try_process_frames(client_t *c)
         }
 
         // Dispatch exactly one frame.
+        uint8_t cmd_id = c->buffer[2];
         dispatch_command(c, c->buffer, frame_len);
         increment_command_count(&server.metrics);
+
+        if (cmd_id == CMD_SET || cmd_id == CMD_DEL ||
+            cmd_id == CMD_INCR || cmd_id == CMD_DECR ||
+            cmd_id == CMD_INCR_BY || cmd_id == CMD_DECR_BY ||
+            cmd_id == CMD_EXPIRE || cmd_id == CMD_PERSIST) {
+            server.dirty++;
+        }
 
         // Shift any remaining bytes (back-to-back frames).
         size_t remain = c->buf_used - frame_len;

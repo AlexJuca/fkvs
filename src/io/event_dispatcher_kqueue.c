@@ -4,6 +4,7 @@
 #include "../core/list.h"
 #include "../networking/networking.h"
 #include "../server.h"
+#include "../persistence/persistence.h"
 #include "../ttl.h"
 #include "../utils.h"
 #include "event_dispatcher.h"
@@ -88,6 +89,9 @@ int run_event_loop()
             break;
         }
 
+        if (server.shutdown_requested)
+            shutdown_server();
+
         // We have new events
         for (int i = 0; i < n; i++) {
             const int ident_fd = (int)evs[i].ident;
@@ -96,6 +100,15 @@ int run_event_loop()
             if (evs[i].filter == EVFILT_TIMER) {
                 expire_sweep(server.database->store, server.database->expires,
                              20);
+                if (server.save_interval > 0 &&
+                    server.dirty >= (uint64_t)server.save_changes_threshold) {
+                    server.save_tick_count++;
+                    if (server.save_tick_count >= server.save_interval * 10) {
+                        save_snapshot(server.database, server.snapshot_path);
+                        server.dirty = 0;
+                        server.save_tick_count = 0;
+                    }
+                }
                 continue;
             }
 

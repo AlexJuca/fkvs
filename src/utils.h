@@ -2,6 +2,7 @@
 #define UTILS_H
 
 #include "client.h"
+#include "fkvs_time.h"
 #include "main.h"
 #include "server.h"
 #include <inttypes.h>
@@ -11,13 +12,6 @@
 #include <time.h>
 
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
-
-static inline int64_t fkvs_now_ms(void)
-{
-    struct timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
-    return (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
-}
 
 static void error_and_exit(const char *ctx, const char *file, const int line)
 {
