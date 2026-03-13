@@ -6,6 +6,8 @@
 char *to_upper(const char *string)
 {
     char *result = malloc(strlen(string) + 1);
+    if (!result)
+        return NULL;
     for (int i = 0; i < strlen(string); ++i) {
         result[i] = toupper(string[i]);
     }

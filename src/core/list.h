@@ -22,5 +22,6 @@ list_t *listInsertNode(list_t *list, list_node_t *node, void *value, int after);
 void listDeleteNode(list_t *list, list_node_t *node);
 void listLinkNodeToHead(list_t *list, list_node_t *node);
 list_node_t *listFindNode(list_t *list, list_node_t *node, void *value);
+list_node_t *listFindNodeByFd(list_t *list, int fd);
 
 #endif

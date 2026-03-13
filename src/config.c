@@ -21,6 +21,7 @@ server_t load_server_config(const char *path)
     server.num_clients = 0;
     server.uds_socket_path = NULL;
     server.socket_domain = TCP_IP;
+    server.event_loop_max_events = MAX_EVENTS;
     if (path) {
         server.config_file_path = path;
     } else {
@@ -36,7 +37,7 @@ server_t load_server_config(const char *path)
 
         char key[512];
         char value[512];
-        sscanf(line, "%s %s", key, value);
+        sscanf(line, "%511s %511s", key, value);
 
         if (strcmp(key, "port") == 0) {
             server.port = atoi(value);
@@ -44,12 +45,10 @@ server_t load_server_config(const char *path)
 
         if (strcmp(key, "event-loop-max-events") == 0) {
             server.event_loop_max_events = atoi(value);
-        } else {
-            server.event_loop_max_events = MAX_EVENTS;
         }
 
         if (strcmp(key, "unixsocket") == 0) {
-            server.uds_socket_path = value;
+            server.uds_socket_path = strdup(value);
             server.socket_domain = UNIX;
         }
 
@@ -81,15 +80,15 @@ server_t load_server_config(const char *path)
             } else {
                 ERROR_AND_EXIT("'daemonize' expects a truth value");
             }
+        }
 
-            if (strcmp(key, "log-enabled") == 0) {
-                if (strcmp(value, "true") == 0) {
-                    server.is_logging_enabled = true;
-                } else if (strcmp(value, "false") == 0) {
-                    server.is_logging_enabled = false;
-                } else {
-                    ERROR_AND_EXIT("'log-enabled' expects a truthy value.");
-                }
+        if (strcmp(key, "log-enabled") == 0) {
+            if (strcmp(value, "true") == 0) {
+                server.is_logging_enabled = true;
+            } else if (strcmp(value, "false") == 0) {
+                server.is_logging_enabled = false;
+            } else {
+                ERROR_AND_EXIT("'log-enabled' expects a truthy value.");
             }
         }
 
@@ -125,9 +124,7 @@ client_t load_client_config(const char *path)
     client.uds_socket_path = NULL;
     client.socket_domain = TCP_IP;
     client.interactive_mode = true;
-    if (client.socket_domain == TCP_IP) {
-        client.ip_address = "127.0.0.1";
-    }
+    client.ip_address = strdup("127.0.0.1");
     if (path) {
         client.config_file_path = path;
     } else {
@@ -143,10 +140,11 @@ client_t load_client_config(const char *path)
         char key[256];
         char value[512];
 
-        sscanf(line, "%s %s", key, value);
+        sscanf(line, "%255s %511s", key, value);
 
         if (strcmp(key, "bind") == 0) {
-            client.ip_address = value;
+            free(client.ip_address);
+            client.ip_address = strdup(value);
         }
 
         if (strcmp(key, "port") == 0) {
@@ -158,7 +156,7 @@ client_t load_client_config(const char *path)
         }
 
         if (strcmp(key, "unixsocket") == 0) {
-            client.uds_socket_path = value;
+            client.uds_socket_path = strdup(value);
             client.socket_domain = UNIX;
         }
     }

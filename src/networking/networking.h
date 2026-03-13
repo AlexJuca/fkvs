@@ -10,7 +10,7 @@
 
 int start_server();
 int start_uds_server();
-void try_process_frames(client_t *c);
+int try_process_frames(client_t *c);
 void set_tcp_no_delay(const int fd);
 void set_nonblocking(const int fd);
 #endif

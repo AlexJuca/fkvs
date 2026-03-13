@@ -34,11 +34,9 @@ static void close_and_drop_client(const int kq, client_t *c)
     (void)kevent(kq, &ch, 1, NULL, 0, NULL);
 
     // remove from the server list
-    list_node_t *node =
-        listFindNode(server.clients, NULL, (void *)(intptr_t)c->fd);
+    list_node_t *node = listFindNode(server.clients, NULL, c);
     if (node) {
         listDeleteNode(server.clients, node);
-        free(node->val); // free(client_t)
     }
 
     close(c->fd);
@@ -76,11 +74,12 @@ int run_event_loop()
         perror("kevent register (timer)");
     }
 
-    struct kevent evs[server.event_loop_max_events];
+    const int max_evs =
+        server.event_loop_max_events > 1024 ? 1024 : server.event_loop_max_events;
+    struct kevent evs[max_evs];
 
     for (;;) {
-        const int n =
-            kevent(kq, NULL, 0, evs, server.event_loop_max_events, NULL);
+        const int n = kevent(kq, NULL, 0, evs, max_evs, NULL);
         if (n < 0) {
             if (errno == EINTR)
                 continue;
@@ -148,8 +147,8 @@ int run_event_loop()
             // Fallback: if udata is missing, find by fd (kept for
             // compatibility).
             if (!c) {
-                const list_node_t *node = listFindNode(
-                    server.clients, NULL, (void *)(intptr_t)ident_fd);
+                const list_node_t *node =
+                    listFindNodeByFd(server.clients, ident_fd);
                 c = node ? (client_t *)node->val : NULL;
                 if (!c) {
                     // Unknown fd; close it defensively.
@@ -164,6 +163,11 @@ int run_event_loop()
                     printf("Client fd=%d closed (EV_EOF)\n", c->fd);
                 }
                 close_and_drop_client(kq, c);
+                // Invalidate stale events referencing the freed client
+                for (int j = i + 1; j < n; j++) {
+                    if (evs[j].udata == c)
+                        evs[j].udata = NULL;
+                }
                 continue;
             }
 
@@ -179,7 +183,14 @@ int run_event_loop()
                     }
 
                     // Process all complete frames currently in buffer
-                    try_process_frames(c);
+                    if (try_process_frames(c) < 0) {
+                        close_and_drop_client(kq, c);
+                        for (int j = i + 1; j < n; j++) {
+                            if (evs[j].udata == c)
+                                evs[j].udata = NULL;
+                        }
+                        break;
+                    }
 
                     // If the buffer is full, but we still need more for a frame
                     // → protocol error.
@@ -190,6 +201,10 @@ int run_event_loop()
                                 "client\n",
                                 c->fd);
                         close_and_drop_client(kq, c);
+                        for (int j = i + 1; j < n; j++) {
+                            if (evs[j].udata == c)
+                                evs[j].udata = NULL;
+                        }
                         break;
                     }
 
@@ -202,6 +217,10 @@ int run_event_loop()
                         printf("Client fd=%d closed (recv=0)\n", c->fd);
                     }
                     close_and_drop_client(kq, c);
+                    for (int j = i + 1; j < n; j++) {
+                        if (evs[j].udata == c)
+                            evs[j].udata = NULL;
+                    }
                     break;
                 }
 
@@ -216,6 +235,10 @@ int run_event_loop()
 
                 perror("recv");
                 close_and_drop_client(kq, c);
+                for (int j = i + 1; j < n; j++) {
+                    if (evs[j].udata == c)
+                        evs[j].udata = NULL;
+                }
                 break;
             }
         }

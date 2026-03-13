@@ -19,7 +19,13 @@ size_t hash_function(const unsigned char *key, const size_t key_len,
 hashtable_t *create_hash_table(const size_t size)
 {
     hashtable_t *table = malloc(sizeof(hashtable_t));
+    if (!table)
+        return NULL;
     table->buckets = calloc(size, sizeof(hash_table_entry_t *));
+    if (!table->buckets) {
+        free(table);
+        return NULL;
+    }
     table->size = size;
     return table;
 }
@@ -78,7 +84,7 @@ bool set_value(const hashtable_t *table, const unsigned char *key,
     }
 
     // Prepare new value entry before touching old one
-    value_entry_t *new_val = malloc(sizeof(value_entry_t));
+    value_entry_t *new_val = calloc(1, sizeof(value_entry_t));
     if (!new_val) {
         if (is_new_entry) {
             // Undo insertion
