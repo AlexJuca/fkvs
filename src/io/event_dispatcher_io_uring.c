@@ -27,11 +27,9 @@ static void close_and_drop_client(struct io_uring *ring, client_t *c)
         printf("Dropping client fd=%d (%s:%d)\n", c->fd, c->ip_str, c->port);
     }
 
-    list_node_t *node =
-        listFindNode(server.clients, NULL, (void *)(intptr_t)c->fd);
+    list_node_t *node = listFindNode(server.clients, NULL, c);
     if (node) {
         listDeleteNode(server.clients, node);
-        free(node->val);
     }
 
     close(c->fd);
@@ -165,7 +163,11 @@ int run_event_loop()
             }
 
             // Process as many complete frames as possible.
-            try_process_frames(c);
+            if (try_process_frames(c) < 0) {
+                close_and_drop_client(&ring, c);
+                io_uring_cqe_seen(&ring, cqe);
+                continue;
+            }
 
             if (c->buf_used == sizeof(c->buffer) && c->frame_need > 0 &&
                 (ssize_t)c->buf_used < c->frame_need) {
