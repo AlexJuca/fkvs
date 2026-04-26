@@ -35,11 +35,9 @@ static void close_and_drop_client(const int epfd, client_t *c)
     memset(&ev, 0, sizeof(ev));
     epoll_ctl(epfd, EPOLL_CTL_DEL, c->fd, &ev);
 
-    list_node_t *node =
-        listFindNode(server.clients, NULL, (void *)(intptr_t)c->fd);
+    list_node_t *node = listFindNode(server.clients, NULL, c);
     if (node) {
         listDeleteNode(server.clients, node);
-        free(node->val); // free(client_t) allocated for list storage if any
     }
 
     close(c->fd);
@@ -86,11 +84,12 @@ int run_event_loop()
         epoll_ctl(epfd, EPOLL_CTL_ADD, tfd, &tev);
     }
 
-    struct epoll_event events[server.event_loop_max_events];
+    const int max_evs =
+        server.event_loop_max_events > 1024 ? 1024 : server.event_loop_max_events;
+    struct epoll_event events[max_evs];
 
     for (;;) {
-        const int n =
-            epoll_wait(epfd, events, server.event_loop_max_events, -1);
+        const int n = epoll_wait(epfd, events, max_evs, -1);
         if (n < 0) {
             if (errno == EINTR)
                 continue;
@@ -176,6 +175,10 @@ int run_event_loop()
                            c ? c->fd : -1, evt);
                 }
                 close_and_drop_client(epfd, c);
+                for (int j = i + 1; j < n; j++) {
+                    if (events[j].data.ptr == c)
+                        events[j].data.ptr = NULL;
+                }
                 continue;
             }
 
@@ -192,7 +195,14 @@ int run_event_loop()
                         }
 
                         // Process as many complete frames as possible
-                        try_process_frames(c);
+                        if (try_process_frames(c) < 0) {
+                            close_and_drop_client(epfd, c);
+                            for (int j = i + 1; j < n; j++) {
+                                if (events[j].data.ptr == c)
+                                    events[j].data.ptr = NULL;
+                            }
+                            break;
+                        }
 
                         // If buffer is full but frame needs more → protocol
                         // error
@@ -204,6 +214,10 @@ int run_event_loop()
                                     "dropping client\n",
                                     c->fd);
                             close_and_drop_client(epfd, c);
+                            for (int j = i + 1; j < n; j++) {
+                                if (events[j].data.ptr == c)
+                                    events[j].data.ptr = NULL;
+                            }
                             break;
                         }
 
@@ -216,6 +230,10 @@ int run_event_loop()
                             printf("Client fd=%d closed (recv=0)\n", c->fd);
                         }
                         close_and_drop_client(epfd, c);
+                        for (int j = i + 1; j < n; j++) {
+                            if (events[j].data.ptr == c)
+                                events[j].data.ptr = NULL;
+                        }
                         break;
                     }
 
@@ -230,6 +248,10 @@ int run_event_loop()
 
                     perror("recv");
                     close_and_drop_client(epfd, c);
+                    for (int j = i + 1; j < n; j++) {
+                        if (events[j].data.ptr == c)
+                            events[j].data.ptr = NULL;
+                    }
                     break;
                 }
             }

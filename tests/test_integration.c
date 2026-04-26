@@ -8,7 +8,6 @@
  */
 
 #include "../src/client.h"
-#include "../src/commands/common/command_defs.h"
 #include "../src/commands/common/command_parser.h"
 #include "../src/commands/common/command_registry.h"
 #include "../src/commands/server/server_command_handlers.h"
@@ -215,7 +214,7 @@ static void assert_decrby(fixture_t *f, const char *key, const char *amount,
     size_t len;
     unsigned char *cmd = construct_decr_by_command(key, amount, &len);
     assert(cmd);
-    ssize_t r = dispatch_and_recv(f, cmd, len, resp, sizeof resp);
+    const ssize_t r = dispatch_and_recv(f, cmd, len, resp, sizeof resp);
     free(cmd);
     assert(r > 0 && resp_is_success(resp, r, expected));
 }
@@ -373,15 +372,7 @@ static void test_decr_auto_creates_key(void)
     printf("  test_decr_auto_creates_key passed.\n");
 }
 
-static void test_decrby_auto_creates_key(void)
-{
-    fixture_t f = setup();
 
-    assert_decrby(&f, "dkey", "7", "7");
-
-    teardown(&f);
-    printf("  test_decrby_auto_creates_key passed.\n");
-}
 
 static void test_incr_after_set(void)
 {
@@ -701,7 +692,7 @@ static void test_lazy_expiry_on_decrby(void)
     sleep(2);
 
     // DECRBY on expired key should auto-create from 0
-    assert_decrby(&f, "dbctr", "3", "3");
+    assert_decrby(&f, "dbctr", "3", "-3");
 
     teardown(&f);
     printf("  test_lazy_expiry_on_decrby passed.\n");
@@ -870,7 +861,6 @@ int main(void)
     test_incr_auto_creates_key();
     test_incrby_auto_creates_key();
     test_decr_auto_creates_key();
-    test_decrby_auto_creates_key();
     test_incr_after_set();
     test_incrby_after_set();
 

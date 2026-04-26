@@ -3,7 +3,6 @@
 #include "../../utils.h"
 #include "../common/command_defs.h"
 
-#include <assert.h>
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
@@ -29,8 +28,8 @@ static void wbuf_append(client_t *client, const unsigned char *data,
         // Write buffer full, flush first
         wbuf_flush(client);
     }
-    if (len > sizeof(client->wbuf)) {
-        // Data larger than entire wbuf — send directly
+    if (client->wbuf_used + len > sizeof(client->wbuf)) {
+        // Still doesn't fit after flush — send directly
         send(client->fd, data, len, 0);
         return;
     }
@@ -67,7 +66,7 @@ void wbuf_flush(client_t *client)
 void dispatch_command(client_t *client, unsigned char *buffer,
                       const size_t bytes_read)
 {
-    if (bytes_read < 1) {
+    if (bytes_read < 3) {
         fprintf(stderr, "Buffer too short for command dispatching\n");
         return;
     }
@@ -85,7 +84,8 @@ void send_ok(client_t *client)
 {
     // Framed OK: [2B core_len=1] [1B STATUS_SUCCESS]
     const unsigned char ok[] = {0x00, 0x01, STATUS_SUCCESS};
-    assert(client->fd > 0);
+    if (client->fd <= 0)
+        return;
     wbuf_append(client, ok, sizeof ok);
 }
 
@@ -93,18 +93,25 @@ void send_error(client_t *client)
 {
     // Framed error: [2B core_len=1] [1B STATUS_FAILURE]
     const unsigned char error[] = {0x00, 0x01, STATUS_FAILURE};
-    assert(client->fd > 0);
+    if (client->fd <= 0)
+        return;
     wbuf_append(client, error, sizeof error);
 }
 
 void send_reply(client_t *client, const unsigned char *buffer,
                 size_t bytes_read)
 {
+    if (client->fd <= 0)
+        return;
+
     const size_t core_cmd_len = bytes_read + 3;
     const size_t full_frame_length = core_cmd_len + 2;
 
     unsigned char frame[65536];
-    assert(full_frame_length <= sizeof(frame));
+    if (full_frame_length > sizeof(frame)) {
+        send_error(client);
+        return;
+    }
 
     frame[0] = (core_cmd_len >> 8) & 0xFF;
     frame[1] = core_cmd_len & 0xFF;
@@ -113,18 +120,35 @@ void send_reply(client_t *client, const unsigned char *buffer,
     frame[4] = bytes_read & 0xFF;
     memcpy(&frame[5], buffer, bytes_read);
 
-    assert(client->fd > 0);
     wbuf_append(client, frame, full_frame_length);
 }
 
-void send_pong(client_t *client, const unsigned char *buffer)
+void send_pong(client_t *client, const unsigned char *buffer,
+               size_t bytes_read)
 {
+    if (client->fd <= 0)
+        return;
+
+    if (bytes_read < 5) {
+        send_error(client);
+        return;
+    }
+
     const size_t value_len = buffer[3] << 8 | buffer[4];
+
+    if (5 + value_len > bytes_read) {
+        send_error(client);
+        return;
+    }
+
     const size_t core_cmd_len = 1 + 2 + value_len;
     const size_t full_frame_length = 2 + core_cmd_len;
 
     unsigned char frame[65536];
-    assert(full_frame_length <= sizeof(frame));
+    if (full_frame_length > sizeof(frame)) {
+        send_error(client);
+        return;
+    }
 
     frame[0] = (core_cmd_len >> 8) & 0xFF;
     frame[1] = core_cmd_len & 0xFF;
@@ -133,6 +157,5 @@ void send_pong(client_t *client, const unsigned char *buffer)
     frame[4] = value_len & 0xFF;
     memcpy(&frame[5], &buffer[5], value_len);
 
-    assert(client->fd > 0);
     wbuf_append(client, frame, full_frame_length);
 }

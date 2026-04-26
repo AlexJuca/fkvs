@@ -2,7 +2,6 @@
 #include "../client.h"
 #include "../utils.h"
 #include <arpa/inet.h>
-#include <assert.h>
 #include <fcntl.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
@@ -29,7 +28,7 @@ int start_server()
     int server_fd;
     struct sockaddr_in server_addr;
 
-    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         perror("socket failed");
         return -1;
     }
@@ -37,13 +36,18 @@ int start_server()
     server.fd = server_fd;
 
     const int one = 1;
+    setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
     setsockopt(server_fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
 
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = INADDR_ANY;
     server_addr.sin_port = htons(server.port);
 
-    assert(server_addr.sin_port != 0);
+    if (server_addr.sin_port == 0) {
+        fprintf(stderr, "Invalid port 0\n");
+        close(server_fd);
+        return -1;
+    }
 
     if (bind(server_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) <
         0) {
@@ -51,7 +55,6 @@ int start_server()
         close(server_fd);
         return -1;
     }
-    assert(server_fd != -1);
 
     if (listen(server_fd, BACKLOG) < 0) {
         perror("listen");
@@ -70,7 +73,6 @@ int start_uds_server()
     struct sockaddr_un server_addr;
 
     int server_fd = socket(AF_UNIX, SOCK_STREAM, 0);
-    assert(server_fd != -1);
     if (server_fd == -1) {
         perror("socket failed");
         return -1;
@@ -105,7 +107,7 @@ int start_uds_server()
         return -1;
     }
 
-    if (chmod(server.uds_socket_path, 0777) == -1) {
+    if (chmod(server.uds_socket_path, 0770) == -1) {
         perror("Failed to set permissions on Unix socket");
         close(server_fd);
         return -1;
@@ -135,7 +137,7 @@ void set_nonblocking(const int fd)
     (void)fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
 
-void try_process_frames(client_t *c)
+int try_process_frames(client_t *c)
 {
     // Parse as many complete frames as possible.
     if (server.verbose) {
@@ -152,11 +154,9 @@ void try_process_frames(client_t *c)
             if ((size_t)c->frame_need > sizeof(c->buffer)) {
                 fprintf(stderr, "Frame too large: %zd > %zu\n", c->frame_need,
                         sizeof(c->buffer));
-                // Drop the buffer contents to resync; caller should disconnect
-                // the client.
                 c->buf_used = 0;
                 c->frame_need = -1;
-                break;
+                return -1;
             }
         }
 
@@ -185,6 +185,7 @@ void try_process_frames(client_t *c)
     // Flush any batched responses after processing all queued frames.
     if (c->wbuf_used > 0)
         wbuf_flush(c);
+    return 0;
 }
 
 #endif
@@ -204,21 +205,23 @@ int start_client(client_t *client)
 
     client->fd = client_fd;
 
-    assert(client_fd != -1);
-    assert(client->port != 0);
-
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(client->port);
 
-    assert(client->ip_address != NULL);
+    if (!client->ip_address) {
+        close(client->fd);
+        return -1;
+    }
     if (inet_pton(AF_INET, client->ip_address, &server_addr.sin_addr) <= 0) {
         perror("Invalid address/ Address not supported");
+        close(client->fd);
         return -1;
     }
 
     if (connect(client->fd, (struct sockaddr *)&server_addr,
                 sizeof(server_addr)) < 0) {
         perror("Connection Failed");
+        close(client->fd);
         return -1;
     }
 
@@ -227,7 +230,6 @@ int start_client(client_t *client)
                client->port);
     }
 
-    assert(client_fd != -1);
     return client_fd;
 }
 
@@ -251,6 +253,7 @@ int start_uds_client(client_t *client)
     if (connect(client_fd, (struct sockaddr *)&server_addr,
                 sizeof(server_addr)) < 0) {
         perror("Connection via unix domain socket failed");
+        close(client_fd);
         return -1;
     }
 
