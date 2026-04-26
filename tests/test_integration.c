@@ -692,7 +692,7 @@ static void test_lazy_expiry_on_decrby(void)
     sleep(2);
 
     // DECRBY on expired key should auto-create from 0
-    assert_decrby(&f, "dbctr", "3", "3");
+    assert_decrby(&f, "dbctr", "3", "-3");
 
     teardown(&f);
     printf("  test_lazy_expiry_on_decrby passed.\n");
