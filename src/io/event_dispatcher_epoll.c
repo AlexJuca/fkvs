@@ -126,10 +126,24 @@ int run_event_loop()
 
             // Timer event for active expiration sweep
             if (tfd >= 0 && events[i].data.fd == tfd) {
-                uint64_t expirations;
-                read(tfd, &expirations, sizeof(expirations));
-                expire_sweep(server.database->store,
-                             server.database->expires, 20);
+                uint64_t expirations = 0;
+                for (;;) {
+                    const ssize_t nread =
+                        read(tfd, &expirations, sizeof(expirations));
+                    if (nread == (ssize_t)sizeof(expirations)) {
+                        expire_sweep(server.database->store,
+                                     server.database->expires, 20);
+                        break;
+                    }
+                    if (nread < 0 && errno == EINTR)
+                        continue;
+                    if (nread < 0 &&
+                        (errno == EAGAIN || errno == EWOULDBLOCK))
+                        break;
+                    if (nread < 0)
+                        perror("timerfd read");
+                    break;
+                }
                 continue;
             }
 
