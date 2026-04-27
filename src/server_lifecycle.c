@@ -74,6 +74,12 @@ void shutdown_server(server_t *srv)
         srv->owns_uds_socket_path = false;
     }
 
+    if (srv->owns_bind_address) {
+        free(srv->bind_address);
+        srv->bind_address = NULL;
+        srv->owns_bind_address = false;
+    }
+
     if (srv->fd >= 0) {
         close(srv->fd);
         srv->fd = -1;

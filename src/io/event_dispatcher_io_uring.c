@@ -6,6 +6,7 @@
 #include "../networking/networking.h"
 #include "../server.h"
 #include "../server_lifecycle.h"
+#include "../server_limits.h"
 #include "../ttl.h"
 #include "../utils.h"
 #include "event_dispatcher.h"
@@ -20,6 +21,22 @@
 
 #define QUEUE_DEPTH 256
 #define BATCH_SUBMIT_THRESHOLD 32
+
+static bool reject_if_server_at_capacity(const int cfd)
+{
+    if (fkvs_server_can_accept_client(&server))
+        return false;
+
+    if (server.verbose) {
+        fprintf(stderr,
+                "Rejecting client fd=%d: max-clients limit reached (%u)\n",
+                cfd, server.max_clients);
+    }
+
+    close(cfd);
+    fkvs_server_record_rejected_client(&server);
+    return true;
+}
 
 static void close_and_drop_client(struct io_uring *ring, client_t *c)
 {
@@ -127,6 +144,9 @@ int run_event_loop()
                     perror("accept");
                     break;
                 }
+
+                if (reject_if_server_at_capacity(cfd))
+                    continue;
 
                 set_nonblocking(cfd);
 
