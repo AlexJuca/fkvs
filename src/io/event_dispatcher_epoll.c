@@ -46,25 +46,11 @@ static void close_and_drop_client(const int epfd, client_t *c)
     if (!c)
         return;
 
-    if (server.verbose) {
-        printf("Dropping client fd=%d (%s:%d)\n", c->fd, c->ip_str, c->port);
-    }
-
     struct epoll_event ev;
     memset(&ev, 0, sizeof(ev));
     epoll_ctl(epfd, EPOLL_CTL_DEL, c->fd, &ev);
 
-    list_node_t *node = listFindNode(server.clients, NULL, c);
-    if (node) {
-        listDeleteNode(server.clients, node);
-    }
-
-    close(c->fd);
-    server.num_clients -= 1;
-    server.num_disconnected_clients += 1;
-    update_disconnected_clients(&server.metrics,
-                                server.num_disconnected_clients);
-    free_client(c);
+    server_drop_client(&server, c);
 }
 
 static int sync_client_write_interest(const int epfd, client_t *c)

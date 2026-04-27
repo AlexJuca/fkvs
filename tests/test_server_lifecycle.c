@@ -92,9 +92,64 @@ static void test_shutdown_server_releases_clients_and_database(void)
     printf("test_shutdown_server_releases_clients_and_database passed.\n");
 }
 
+static void test_server_drop_client_releases_tracked_client(void)
+{
+    int client_pair[2];
+    assert(socketpair(AF_UNIX, SOCK_STREAM, 0, client_pair) == 0);
+
+    server_t srv = {0};
+    srv.clients = listCreate();
+    assert(srv.clients != NULL);
+
+    client_t *client = test_client(client_pair[0]);
+    srv.clients = listAddNodeToTail(srv.clients, client);
+    srv.num_clients = 1;
+
+    server_drop_client(&srv, client);
+
+    assert(srv.clients->len == 0);
+    assert(srv.num_clients == 0);
+    assert(srv.num_disconnected_clients == 1);
+    assert(srv.metrics.disconnected_clients == 1);
+    assert(fd_is_closed(client_pair[0]));
+
+    free(srv.clients);
+    close(client_pair[1]);
+
+    printf("test_server_drop_client_releases_tracked_client passed.\n");
+}
+
+static void test_server_drop_client_does_not_underflow_untracked_client(void)
+{
+    int client_pair[2];
+    assert(socketpair(AF_UNIX, SOCK_STREAM, 0, client_pair) == 0);
+
+    server_t srv = {0};
+    srv.clients = listCreate();
+    assert(srv.clients != NULL);
+
+    client_t *client = test_client(client_pair[0]);
+
+    server_drop_client(&srv, client);
+
+    assert(srv.clients->len == 0);
+    assert(srv.num_clients == 0);
+    assert(srv.num_disconnected_clients == 1);
+    assert(srv.metrics.disconnected_clients == 1);
+    assert(fd_is_closed(client_pair[0]));
+
+    free(srv.clients);
+    close(client_pair[1]);
+
+    printf("test_server_drop_client_does_not_underflow_untracked_client "
+           "passed.\n");
+}
+
 int main(void)
 {
     test_signal_handler_only_sets_shutdown_flag();
     test_shutdown_server_releases_clients_and_database();
+    test_server_drop_client_releases_tracked_client();
+    test_server_drop_client_does_not_underflow_untracked_client();
     return 0;
 }
