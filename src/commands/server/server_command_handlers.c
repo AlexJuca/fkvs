@@ -16,15 +16,6 @@
 static hashtable_t *table = NULL;
 static hashtable_t *expires = NULL;
 
-static void free_value_copy(value_entry_t *value)
-{
-    if (!value)
-        return;
-
-    free(value->ptr);
-    free(value);
-}
-
 static bool check_and_expire(const unsigned char *key, size_t key_len)
 {
     if (is_expired(expires, key, key_len)) {
@@ -198,8 +189,8 @@ void handle_set_command(client_t *client, unsigned char *buffer, size_t bytes_re
                    value_len, value_encoding)) {
         send_error(client);
         fprintf(stderr, "Unable to store SET value\n");
-        free_value_copy(old_value);
-        free_value_copy(old_expiry);
+        free_value_entry(old_value);
+        free_value_entry(old_expiry);
         free(data);
         return;
     }
@@ -222,8 +213,8 @@ void handle_set_command(client_t *client, unsigned char *buffer, size_t bytes_re
             } else {
                 delete_value(expires, &buffer[pos_key], key_len);
             }
-            free_value_copy(old_value);
-            free_value_copy(old_expiry);
+            free_value_entry(old_value);
+            free_value_entry(old_expiry);
             free(data);
             return;
         }
@@ -233,8 +224,8 @@ void handle_set_command(client_t *client, unsigned char *buffer, size_t bytes_re
     }
 
     send_reply(client, &buffer[pos_value], value_len);
-    free_value_copy(old_value);
-    free_value_copy(old_expiry);
+    free_value_entry(old_value);
+    free_value_entry(old_expiry);
     free(data);
 }
 
@@ -268,7 +259,7 @@ void handle_get_command(client_t *client, unsigned char *buffer, size_t bytes_re
             if (!resp_buffer) {
                 send_error(client);
                 perror("malloc failed");
-                free_value_copy(value);
+                free_value_entry(value);
                 return;
             }
 
@@ -277,7 +268,7 @@ void handle_get_command(client_t *client, unsigned char *buffer, size_t bytes_re
             resp_buffer[value_len] = '\0';
             send_reply(client, resp_buffer, value_len);
             free(resp_buffer);
-            free_value_copy(value);
+            free_value_entry(value);
         } else {
             send_error(client);
         }
@@ -339,7 +330,7 @@ void handle_incr_command(client_t *client, unsigned char *buffer,
     if (value->encoding != VALUE_ENTRY_TYPE_INT) {
         fprintf(stderr, "Stored value is not an integer.\n");
         send_error(client);
-        free_value_copy(value);
+        free_value_entry(value);
         return;
     }
 
@@ -349,7 +340,7 @@ void handle_incr_command(client_t *client, unsigned char *buffer,
         current == INT64_MAX) {
         fprintf(stderr, "Stored integer is out of range.\n");
         send_error(client);
-        free_value_copy(value);
+        free_value_entry(value);
         return;
     }
     const int64_t sum = current + 1;
@@ -361,7 +352,7 @@ void handle_incr_command(client_t *client, unsigned char *buffer,
     char *reply = int64_to_string(sum);
     if (!reply) {
         send_error(client);
-        free_value_copy(value);
+        free_value_entry(value);
         return;
     }
     const size_t reply_len = strlen(reply);
@@ -371,13 +362,13 @@ void handle_incr_command(client_t *client, unsigned char *buffer,
         fprintf(stderr, "Unable to set incremented value.\n");
         send_error(client);
         free(reply);
-        free_value_copy(value);
+        free_value_entry(value);
         return;
     }
 
     send_reply(client, (const unsigned char *)reply, reply_len);
     free(reply);
-    free_value_copy(value);
+    free_value_entry(value);
 }
 
 void handle_incr_by_command(client_t *client, unsigned char *buffer,
@@ -455,7 +446,7 @@ void handle_incr_by_command(client_t *client, unsigned char *buffer,
     if (old_value->encoding != VALUE_ENTRY_TYPE_INT) {
         fprintf(stderr, "Stored value is not an integer.\n");
         send_error(client);
-        free_value_copy(old_value);
+        free_value_entry(old_value);
         free(incr_str);
         return;
     }
@@ -470,7 +461,7 @@ void handle_incr_by_command(client_t *client, unsigned char *buffer,
         (increment < 0 && current < INT64_MIN - increment)) {
         fprintf(stderr, "Integer increment is out of range.\n");
         send_error(client);
-        free_value_copy(old_value);
+        free_value_entry(old_value);
         free(incr_str);
         return;
     }
@@ -483,7 +474,7 @@ void handle_incr_by_command(client_t *client, unsigned char *buffer,
     char *result = int64_to_string(sum);
     if (!result) {
         send_error(client);
-        free_value_copy(old_value);
+        free_value_entry(old_value);
         free(incr_str);
         return;
     }
@@ -493,14 +484,14 @@ void handle_incr_by_command(client_t *client, unsigned char *buffer,
                    result_len, VALUE_ENTRY_TYPE_INT)) {
         fprintf(stderr, "Unable to set incremented value.\n");
         send_error(client);
-        free_value_copy(old_value);
+        free_value_entry(old_value);
         free(incr_str);
         free(result);
         return;
     }
 
     send_reply(client, (unsigned char *)result, result_len);
-    free_value_copy(old_value);
+    free_value_entry(old_value);
     free(incr_str);
     free(result);
 }
@@ -581,7 +572,7 @@ void handle_decr_by_command(client_t *client, unsigned char *buffer,
     if (old_value->encoding != VALUE_ENTRY_TYPE_INT) {
         fprintf(stderr, "Stored value is not an integer.\n");
         send_error(client);
-        free_value_copy(old_value);
+        free_value_entry(old_value);
         free(decr_str);
         return;
     }
@@ -596,7 +587,7 @@ void handle_decr_by_command(client_t *client, unsigned char *buffer,
         (decrement < 0 && current > INT64_MAX + decrement)) {
         fprintf(stderr, "Integer decrement is out of range.\n");
         send_error(client);
-        free_value_copy(old_value);
+        free_value_entry(old_value);
         free(decr_str);
         return;
     }
@@ -609,7 +600,7 @@ void handle_decr_by_command(client_t *client, unsigned char *buffer,
     char *result = int64_to_string(result_val);
     if (!result) {
         send_error(client);
-        free_value_copy(old_value);
+        free_value_entry(old_value);
         free(decr_str);
         return;
     }
@@ -619,14 +610,14 @@ void handle_decr_by_command(client_t *client, unsigned char *buffer,
                    result_len, VALUE_ENTRY_TYPE_INT)) {
         fprintf(stderr, "Unable to set decremented value.\n");
         send_error(client);
-        free_value_copy(old_value);
+        free_value_entry(old_value);
         free(decr_str);
         free(result);
         return;
     }
 
     send_reply(client, (unsigned char *)result, result_len);
-    free_value_copy(old_value);
+    free_value_entry(old_value);
     free(decr_str);
     free(result);
 }
@@ -762,7 +753,7 @@ void handle_decr_command(client_t *client, unsigned char *buffer,
     if (value->encoding != VALUE_ENTRY_TYPE_INT) {
         fprintf(stderr, "Stored value is not an integer.\n");
         send_error(client);
-        free_value_copy(value);
+        free_value_entry(value);
         return;
     }
 
@@ -772,7 +763,7 @@ void handle_decr_command(client_t *client, unsigned char *buffer,
         current == INT64_MIN) {
         fprintf(stderr, "Stored integer is out of range.\n");
         send_error(client);
-        free_value_copy(value);
+        free_value_entry(value);
         return;
     }
     const int64_t decrement = current - 1;
@@ -780,7 +771,7 @@ void handle_decr_command(client_t *client, unsigned char *buffer,
     char *result_str = int64_to_string(decrement);
     if (!result_str) {
         send_error(client);
-        free_value_copy(value);
+        free_value_entry(value);
         return;
     }
     const size_t result_length = strlen(result_str);
@@ -789,13 +780,13 @@ void handle_decr_command(client_t *client, unsigned char *buffer,
                    result_length, VALUE_ENTRY_TYPE_INT)) {
         fprintf(stderr, "Unable to set decremented value.\n");
         send_error(client);
-        free_value_copy(value);
+        free_value_entry(value);
         free(result_str);
         return;
     }
 
     send_reply(client, (unsigned char *)result_str, result_length);
-    free_value_copy(value);
+    free_value_entry(value);
     free(result_str);
 }
 
@@ -872,12 +863,12 @@ void handle_expire_command(client_t *client, unsigned char *buffer,
         send_error(client);
         return;
     }
-    free(val->ptr);
-    free(val);
+    free_value_entry(val);
 
     // Parse seconds string
     char sec_buf[32];
-    size_t copy_len = ttl_str_len < sizeof(sec_buf) - 1 ? ttl_str_len : sizeof(sec_buf) - 1;
+    size_t copy_len =
+        ttl_str_len < sizeof(sec_buf) - 1 ? ttl_str_len : sizeof(sec_buf) - 1;
     memcpy(sec_buf, &buffer[pos_ttl], copy_len);
     sec_buf[copy_len] = '\0';
 
@@ -927,8 +918,7 @@ void handle_ttl_command(client_t *client, unsigned char *buffer,
     size_t val_len;
     bool key_exists = get_value(table, &buffer[5], key_len, &val, &val_len);
     if (key_exists) {
-        free(val->ptr);
-        free(val);
+        free_value_entry(val);
     }
 
     int64_t ttl;
@@ -936,7 +926,8 @@ void handle_ttl_command(client_t *client, unsigned char *buffer,
         ttl = -2;
     } else {
         ttl = get_ttl(expires, &buffer[5], key_len);
-        // get_ttl returns -2 if not in expires table; for existing key with no TTL, return -1
+        // get_ttl returns -2 if not in expires table; for existing key with
+        // no TTL, return -1.
         if (ttl == -2)
             ttl = -1;
     }
