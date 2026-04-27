@@ -3,14 +3,13 @@
 #include "../utils.h"
 #include <arpa/inet.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <stdio.h>
 #include <sys/un.h>
 #include <time.h>
 #include <unistd.h>
-
-#define BACKLOG 2000000 // Number of allowed connections
 
 #ifdef SERVER
 
@@ -20,6 +19,15 @@
 #include <libgen.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+
+static int server_listen_backlog(void)
+{
+    if (server.max_clients == 0)
+        return (int)FKVS_DEFAULT_MAX_CLIENTS;
+    if (server.max_clients > (uint32_t)INT_MAX)
+        return INT_MAX;
+    return (int)server.max_clients;
+}
 
 int start_server()
 {
@@ -37,13 +45,25 @@ int start_server()
     setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
     setsockopt(server_fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
 
+    memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = INADDR_ANY;
     server_addr.sin_port = htons(server.port);
 
     if (server_addr.sin_port == 0) {
         fprintf(stderr, "Invalid port 0\n");
         close(server_fd);
+        server.fd = -1;
+        return -1;
+    }
+
+    const char *bind_address =
+        server.bind_address ? server.bind_address : FKVS_DEFAULT_BIND_ADDRESS;
+    if (inet_pton(AF_INET, bind_address, &server_addr.sin_addr) != 1) {
+        fprintf(stderr,
+                "Invalid bind address '%s' (expected an IPv4 address)\n",
+                bind_address);
+        close(server_fd);
+        server.fd = -1;
         return -1;
     }
 
@@ -51,12 +71,14 @@ int start_server()
         0) {
         perror("bind failed");
         close(server_fd);
+        server.fd = -1;
         return -1;
     }
 
-    if (listen(server_fd, BACKLOG) < 0) {
+    if (listen(server_fd, server_listen_backlog()) < 0) {
         perror("listen");
         close(server_fd);
+        server.fd = -1;
         return -1;
     }
 
@@ -112,7 +134,7 @@ int start_uds_server()
         return -1;
     }
 
-    if (listen(server_fd, BACKLOG) < 0) {
+    if (listen(server_fd, server_listen_backlog()) < 0) {
         perror("listen");
         close(server_fd);
         return -1;

@@ -10,6 +10,9 @@
 #include <stdint.h>
 #include <sys/types.h>
 
+#define FKVS_DEFAULT_BIND_ADDRESS "127.0.0.1"
+#define FKVS_DEFAULT_MAX_CLIENTS 128U
+
 typedef struct {
 #define TABLE_SIZE 8092
     hashtable_t *store;
@@ -20,6 +23,7 @@ typedef struct server_t {
     list_t *clients;
     const char *config_file_path;
     db_t *database;
+    char *bind_address;
     char *uds_socket_path; // Unix domain socket path
     counter_t metrics;
     int port;
@@ -29,6 +33,7 @@ typedef struct server_t {
     int32_t num_disconnected_clients;
     pid_t pid;
     uint32_t num_clients;
+    uint32_t max_clients;
     enum socket_domain socket_domain;
     event_loop_dispatcher_kind event_dispatcher_kind;
     bool use_io_uring;
@@ -36,6 +41,7 @@ typedef struct server_t {
     bool verbose;
     bool show_logo;
     bool daemonize;
+    bool owns_bind_address;
     bool owns_uds_socket_path;
 } server_t __attribute__((aligned(128)));
 
