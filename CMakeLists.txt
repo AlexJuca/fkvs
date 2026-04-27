@@ -17,6 +17,7 @@ option(FKVS_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
 option(FKVS_ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
 
 function(fkvs_configure_target target_name)
+  target_compile_definitions(${target_name} PRIVATE _POSIX_C_SOURCE=200809L)
   target_compile_features(${target_name} PRIVATE c_std_23)
 
   if(FKVS_ENABLE_WARNINGS AND CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")

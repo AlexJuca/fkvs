@@ -7,6 +7,7 @@
 #include "io/event_dispatcher.h"
 #include "networking/modes.h"
 #include <stdbool.h>
+#include <stdint.h>
 #include <sys/types.h>
 
 typedef struct {
@@ -27,7 +28,7 @@ typedef struct server_t {
     int event_loop_max_events;
     int32_t num_disconnected_clients;
     pid_t pid;
-    u_int32_t num_clients;
+    uint32_t num_clients;
     enum socket_domain socket_domain;
     event_loop_dispatcher_kind event_dispatcher_kind;
     bool use_io_uring;
