@@ -19,7 +19,10 @@ server_t load_server_config(const char *path)
     }
 
     server.num_clients = 0;
+    server.fd = -1;
+    server.event_loop_fd = -1;
     server.uds_socket_path = NULL;
+    server.owns_uds_socket_path = false;
     server.socket_domain = TCP_IP;
     server.event_loop_max_events = MAX_EVENTS;
     if (path) {
@@ -35,9 +38,10 @@ server_t load_server_config(const char *path)
             continue; // Let's ignore comment lines and blank lines in
                       // configuration files
 
-        char key[512];
-        char value[512];
-        sscanf(line, "%511s %511s", key, value);
+        char key[512] = {0};
+        char value[512] = {0};
+        if (sscanf(line, "%511s %511s", key, value) != 2)
+            continue;
 
         if (strcmp(key, "port") == 0) {
             server.port = atoi(value);
@@ -49,6 +53,10 @@ server_t load_server_config(const char *path)
 
         if (strcmp(key, "unixsocket") == 0) {
             server.uds_socket_path = strdup(value);
+            if (!server.uds_socket_path) {
+                ERROR_AND_EXIT("Failed to allocate unixsocket path");
+            }
+            server.owns_uds_socket_path = true;
             server.socket_domain = UNIX;
         }
 
@@ -137,10 +145,11 @@ client_t load_client_config(const char *path)
         if (line[0] == '#' || line[0] == '\0')
             continue;
 
-        char key[256];
-        char value[512];
+        char key[256] = {0};
+        char value[512] = {0};
 
-        sscanf(line, "%255s %511s", key, value);
+        if (sscanf(line, "%255s %511s", key, value) != 2)
+            continue;
 
         if (strcmp(key, "bind") == 0) {
             free(client.ip_address);

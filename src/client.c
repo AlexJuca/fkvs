@@ -15,7 +15,18 @@ client_t *init_client(const int client_fd, const struct sockaddr_storage ss,
     }
 
     client->fd = client_fd;
+    client->wbuf_capacity = FKVS_CLIENT_WRITE_BUFFER_INITIAL_CAPACITY;
+    client->wbuf = malloc(client->wbuf_capacity);
+    if (!client->wbuf) {
+        perror("malloc client write buffer");
+        close(client_fd);
+        free(client);
+        return NULL;
+    }
     client->buf_used = 0;
+    client->wbuf_used = 0;
+    client->write_failed = false;
+    client->write_registered = false;
     client->frame_need = -1;
     client->ip_str[0] = '\0';
     client->ip_address = client->ip_str; // keep alias consistent
@@ -45,4 +56,13 @@ client_t *init_client(const int client_fd, const struct sockaddr_storage ss,
     }
 
     return client;
+}
+
+void free_client(client_t *client)
+{
+    if (!client)
+        return;
+
+    free(client->wbuf);
+    free(client);
 }

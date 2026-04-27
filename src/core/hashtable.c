@@ -32,12 +32,18 @@ hashtable_t *create_hash_table(const size_t size)
 
 void free_hash_table(hashtable_t *table)
 {
+    if (!table)
+        return;
+
     for (size_t i = 0; i < table->size; i++) {
         hash_table_entry_t *entry = table->buckets[i];
         while (entry) {
             hash_table_entry_t *next = entry->next;
             free(entry->key);
-            free(entry->value);
+            if (entry->value) {
+                free(entry->value->ptr);
+                free(entry->value);
+            }
             free(entry);
             entry = next;
         }
@@ -52,12 +58,10 @@ bool set_value(const hashtable_t *table, const unsigned char *key,
 {
     const size_t index = hash_function(key, key_len, table->size);
     hash_table_entry_t *current = table->buckets[index];
-    hash_table_entry_t *prev = NULL;
 
     // Search for existing key
     while (current != NULL && (current->key_len != key_len ||
                                memcmp(current->key, key, key_len) != 0)) {
-        prev = current;
         current = current->next;
     }
 
@@ -176,14 +180,16 @@ bool get_value(hashtable_t *table, unsigned char *key, size_t key_len,
             if (!out)
                 return false;
 
-            // deep copy value bytes
-            out->ptr = malloc(current->value->value_len);
+            // Deep copy value bytes. The trailing NUL is only a defensive pad;
+            // value_len remains authoritative because values may be binary.
+            out->ptr = malloc(current->value->value_len + 1);
             if (!out->ptr) {
                 free(out);
                 return false;
             }
 
             memcpy(out->ptr, current->value->ptr, current->value->value_len);
+            ((unsigned char *)out->ptr)[current->value->value_len] = '\0';
 
             // copy metadata
             out->value_len = current->value->value_len;

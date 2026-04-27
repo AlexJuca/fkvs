@@ -5,12 +5,13 @@
 
 char *to_upper(const char *string)
 {
-    char *result = malloc(strlen(string) + 1);
+    const size_t len = strlen(string);
+    char *result = malloc(len + 1);
     if (!result)
         return NULL;
-    for (int i = 0; i < strlen(string); ++i) {
-        result[i] = toupper(string[i]);
+    for (size_t i = 0; i < len; ++i) {
+        result[i] = (char)toupper((unsigned char)string[i]);
     }
-    result[strlen(string)] = '\0';
+    result[len] = '\0';
     return result;
 }
