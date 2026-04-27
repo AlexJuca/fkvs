@@ -393,6 +393,8 @@ void cmd_persist(const command_args_t args, void (*response_cb)(client_t *client
 void cmd_unknown(const command_args_t args,
                  void (*response_cb)(client_t *client))
 {
+    (void)response_cb;
+
     if (strncmp(args.cmd, "INCR ", 5) &&
         strncmp(args.cmd, "INCRBY ", 6) &&
         strncmp(args.cmd, "GET ", 4) &&
@@ -424,7 +426,7 @@ void execute_command(const char *cmd, client_t *client,
                      void (*response_cb)(client_t *client))
 {
     const command_args_t args = {.cmd = cmd, .client = client};
-    for (int i = 0; i < ARRAY_SIZE(command_table); i++) {
+    for (size_t i = 0; i < ARRAY_SIZE(command_table); i++) {
         command_table[i].cmd_fn(args, response_cb);
     }
 }

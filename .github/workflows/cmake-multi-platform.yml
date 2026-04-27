@@ -14,7 +14,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        build_type: [Debug]
+        build_type: [Debug, Release]
         c_compiler: [gcc, clang]
         include:
           # Ubuntu combos
@@ -75,6 +75,8 @@ jobs:
           -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
           -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} 
           -DCMAKE_EXPORT_COMPILE_COMMANDS=on
+          -DFKVS_ENABLE_WARNINGS=ON
+          -DFKVS_WARNINGS_AS_ERRORS=ON
           -S ${{ github.workspace }}
 
       - name: Build
@@ -86,29 +88,68 @@ jobs:
             -B ${{ steps.strings.outputs.build-output-dir }}
 
       - name: Install CodeChecker dependencies
+        if: matrix.build_type == 'Debug'
         run: |
           if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
             sudo apt-get update
             sudo apt-get install -y clang clang-tidy clang-tools python3-pip
             pip3 install codechecker
           elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+            if ! command -v pipx >/dev/null 2>&1; then
+              brew update
+              brew install pipx
+            fi
             python3 -m venv path/to/venv
             source path/to/venv/bin/activate
             pipx install codechecker
           fi
 
       - name: Run CodeChecker analysis
+        if: matrix.build_type == 'Debug'
         id: codechecker
         run: |
           CodeChecker analyze ${{ steps.strings.outputs.build-output-dir }}/compile_commands.json --output ${{ github.workspace }}/${{ matrix.os }}/reports
-          CodeChecker parse ${{ github.workspace }}/reports --export html --output ${{ github.workspace }}/html_reports || true
+          CodeChecker parse ${{ github.workspace }}/${{ matrix.os }}/reports --export html --output ${{ github.workspace }}/html_reports || true
           echo "result-html-dir=${{ github.workspace }}/html_reports" >> $GITHUB_OUTPUT
 
       - uses: actions/upload-artifact@v4
+        if: matrix.build_type == 'Debug'
         with:
-          name: "CodeChecker Bug Reports"
+          name: "CodeChecker Bug Reports (${{ matrix.os }})"
           path: ${{ steps.codechecker.outputs.result-html-dir }}
 
       - name: Test
         working-directory: ${{ steps.strings.outputs.build-output-dir }}
-        run: ctest -C ${{ matrix.build_type }}
+        run: ctest -C ${{ matrix.build_type }} --output-on-failure
+
+  sanitizers:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Install sanitizer toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang
+
+      - name: Configure CMake with sanitizers
+        run: >
+          cmake -B ${{ github.workspace }}/build-sanitize
+          -DCMAKE_C_COMPILER=clang
+          -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_EXPORT_COMPILE_COMMANDS=on
+          -DFKVS_ENABLE_WARNINGS=ON
+          -DFKVS_WARNINGS_AS_ERRORS=ON
+          -DFKVS_ENABLE_SANITIZERS=ON
+          -S ${{ github.workspace }}
+
+      - name: Build sanitizer target
+        run: cmake --build ${{ github.workspace }}/build-sanitize --config Debug
+
+      - name: Test with sanitizers
+        working-directory: ${{ github.workspace }}/build-sanitize
+        run: ctest -C Debug --output-on-failure

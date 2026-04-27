@@ -23,8 +23,6 @@
 
 int start_server()
 {
-    time_t ct;
-    time(&ct);
     int server_fd;
     struct sockaddr_in server_addr;
 
@@ -68,8 +66,6 @@ int start_server()
 
 int start_uds_server()
 {
-    time_t ct;
-    time(&ct);
     struct sockaddr_un server_addr;
 
     int server_fd = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -79,7 +75,10 @@ int start_uds_server()
     }
 
     server.fd = server_fd;
-    server.uds_socket_path = FKVS_SOCK_PATH;
+    if (!server.uds_socket_path) {
+        server.uds_socket_path = FKVS_SOCK_PATH;
+        server.owns_uds_socket_path = false;
+    }
 
     memset(&server_addr, 0, sizeof(struct sockaddr_un));
     server_addr.sun_family = AF_UNIX;
@@ -173,6 +172,8 @@ int try_process_frames(client_t *c)
         // Dispatch exactly one frame.
         dispatch_command(c, c->buffer, frame_len);
         increment_command_count(&server.metrics);
+        if (c->write_failed)
+            return -1;
 
         // Shift any remaining bytes (back-to-back frames).
         size_t remain = c->buf_used - frame_len;
@@ -185,7 +186,7 @@ int try_process_frames(client_t *c)
     // Flush any batched responses after processing all queued frames.
     if (c->wbuf_used > 0)
         wbuf_flush(c);
-    return 0;
+    return c->write_failed ? -1 : 0;
 }
 
 #endif

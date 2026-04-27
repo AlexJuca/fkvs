@@ -43,10 +43,10 @@ static fixture_t setup(void)
     int rc = socketpair(AF_UNIX, SOCK_STREAM, 0, fds);
     assert(rc == 0);
 
-    client_t *c = calloc(1, sizeof(client_t));
+    struct sockaddr_storage ss;
+    memset(&ss, 0, sizeof(ss));
+    client_t *c = init_client(fds[0], ss, UNIX);
     assert(c != NULL);
-    c->fd = fds[0];
-    c->frame_need = -1;
 
     db_t *db = malloc(sizeof(db_t));
     assert(db != NULL);
@@ -62,7 +62,7 @@ static void teardown(fixture_t *f)
 {
     close(f->client->fd);
     close(f->read_fd);
-    free(f->client);
+    free_client(f->client);
     free_hash_table(f->db->store);
     free_hash_table(f->db->expires);
     free(f->db);
@@ -126,6 +126,18 @@ static void assert_set_ex(fixture_t *f, const char *key, const char *value,
     ssize_t r = dispatch_and_recv(f, cmd, len, resp, sizeof resp);
     free(cmd);
     assert(r > 0 && resp_is_success(resp, r, expected));
+}
+
+static void assert_set_ex_error(fixture_t *f, const char *key, const char *value,
+                                const char *seconds)
+{
+    unsigned char resp[512];
+    size_t len;
+    unsigned char *cmd = construct_set_ex_command(key, value, seconds, &len);
+    assert(cmd);
+    ssize_t r = dispatch_and_recv(f, cmd, len, resp, sizeof resp);
+    free(cmd);
+    assert(r > 0 && resp_is_error(resp, r));
 }
 
 static void assert_set(fixture_t *f, const char *key, const char *value,
@@ -713,6 +725,30 @@ static void test_expire_zero_expires_immediately(void)
     printf("  test_expire_zero_expires_immediately passed.\n");
 }
 
+static void test_expire_rejects_invalid_ttl(void)
+{
+    fixture_t f = setup();
+
+    assert_set(&f, "badttl", "val", "val");
+    assert_expire_error(&f, "badttl", "abc");
+    assert_get(&f, "badttl", "val");
+
+    teardown(&f);
+    printf("  test_expire_rejects_invalid_ttl passed.\n");
+}
+
+static void test_expire_rejects_negative_ttl(void)
+{
+    fixture_t f = setup();
+
+    assert_set(&f, "negttl", "val", "val");
+    assert_expire_error(&f, "negttl", "-1");
+    assert_get(&f, "negttl", "val");
+
+    teardown(&f);
+    printf("  test_expire_rejects_negative_ttl passed.\n");
+}
+
 static void test_del_double(void)
 {
     fixture_t f = setup();
@@ -843,6 +879,28 @@ static void test_set_ex_zero(void)
     printf("  test_set_ex_zero passed.\n");
 }
 
+static void test_set_ex_rejects_invalid_ttl_atomically(void)
+{
+    fixture_t f = setup();
+
+    assert_set_ex_error(&f, "exbad", "val", "abc");
+    assert_get_error(&f, "exbad");
+
+    teardown(&f);
+    printf("  test_set_ex_rejects_invalid_ttl_atomically passed.\n");
+}
+
+static void test_set_ex_rejects_negative_ttl_atomically(void)
+{
+    fixture_t f = setup();
+
+    assert_set_ex_error(&f, "exneg", "val", "-1");
+    assert_get_error(&f, "exneg");
+
+    teardown(&f);
+    printf("  test_set_ex_rejects_negative_ttl_atomically passed.\n");
+}
+
 /* ── main ──────────────────────────────────────────────────────────── */
 
 int main(void)
@@ -888,6 +946,8 @@ int main(void)
     test_expire_nonexistent_key();
     test_expire_overwrites_previous();
     test_expire_zero_expires_immediately();
+    test_expire_rejects_invalid_ttl();
+    test_expire_rejects_negative_ttl();
 
     /* Edge cases — PERSIST */
     test_persist_on_key_without_ttl();
@@ -907,6 +967,8 @@ int main(void)
     test_set_ex_expires();
     test_set_ex_overwritten_by_set();
     test_set_ex_zero();
+    test_set_ex_rejects_invalid_ttl_atomically();
+    test_set_ex_rejects_negative_ttl_atomically();
 
     printf("All integration tests passed.\n");
     return 0;

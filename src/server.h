@@ -17,7 +17,7 @@ typedef struct {
 
 typedef struct server_t {
     list_t *clients;
-    char *config_file_path;
+    const char *config_file_path;
     db_t *database;
     char *uds_socket_path; // Unix domain socket path
     counter_t metrics;
@@ -35,7 +35,7 @@ typedef struct server_t {
     bool verbose;
     bool show_logo;
     bool daemonize;
+    bool owns_uds_socket_path;
 } server_t __attribute__((aligned(128)));
-;
 
 #endif // SERVER_H

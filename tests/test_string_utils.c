@@ -17,5 +17,7 @@ void test_string_utils_to_upper()
 
 int main(int argc, char *argv[])
 {
+    (void)argc;
+    (void)argv;
     test_string_utils_to_upper();
 }

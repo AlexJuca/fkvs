@@ -1,13 +1,16 @@
 #ifdef __linux__
 #include "../client.h"
+#include "../commands/common/command_registry.h"
 #include "../core/list.h"
 #include "../networking/modes.h"
 #include "../networking/networking.h"
 #include "../server.h"
+#include "../server_lifecycle.h"
 #include "../ttl.h"
 #include "../utils.h"
 #include "event_dispatcher.h"
 
+#include <errno.h>
 #include <liburing.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -20,6 +23,7 @@
 
 static void close_and_drop_client(struct io_uring *ring, client_t *c)
 {
+    (void)ring;
     if (!c)
         return;
 
@@ -37,7 +41,7 @@ static void close_and_drop_client(struct io_uring *ring, client_t *c)
     server.num_disconnected_clients += 1;
     update_disconnected_clients(&server.metrics,
                                 server.num_disconnected_clients);
-    free(c);
+    free_client(c);
 }
 
 int run_event_loop()
@@ -69,10 +73,14 @@ int run_event_loop()
 
     unsigned int sqe_count = 0;
 
-    for (;;) {
+    while (!server_shutdown_requested()) {
         struct io_uring_cqe *cqe;
         res = io_uring_wait_cqe(&ring, &cqe);
         if (res < 0) {
+            if (res == -EINTR && server_shutdown_requested())
+                break;
+            if (res == -EINTR)
+                continue;
             fprintf(stderr, "Wait for completion queue entry failed: %s\n",
                     strerror(-res));
             break;
@@ -200,6 +208,8 @@ int run_event_loop()
         io_uring_submit(&ring);
     }
 
+    if (tfd >= 0)
+        close(tfd);
     io_uring_queue_exit(&ring);
     return 0;
 }

@@ -54,7 +54,7 @@ static void fkvs_keygen_init_once(void)
 
 static void fkvs_bytes_to_hex32(const uint8_t in[16], char out[33])
 {
-    static const char hexd[16] = "0123456789abcdef";
+    static const char hexd[] = "0123456789abcdef";
     for (int i = 0; i < 16; ++i) {
         out[i * 2 + 0] = hexd[in[i] >> 4];
         out[i * 2 + 1] = hexd[in[i] & 0xF];
