@@ -1,18 +1,28 @@
 #include "../src/string_utils.h"
 
 #include <assert.h>
+#include <stdlib.h>
 #include <string.h>
 
 void test_string_utils_to_upper()
 {
     const char *string = "set";
-    assert(strcmp(to_upper(string), "SET") == 0);
+    char *upper = to_upper(string);
+    assert(upper != NULL);
+    assert(strcmp(upper, "SET") == 0);
+    free(upper);
 
     const char *ping = "ping ";
-    assert(strcmp(to_upper(ping), "PING ") == 0);
+    upper = to_upper(ping);
+    assert(upper != NULL);
+    assert(strcmp(upper, "PING ") == 0);
+    free(upper);
 
     const char *world = "WORLD";
-    assert(strcmp(to_upper(world), "WORLD") == 0);
+    upper = to_upper(world);
+    assert(upper != NULL);
+    assert(strcmp(upper, "WORLD") == 0);
+    free(upper);
 }
 
 int main(int argc, char *argv[])
