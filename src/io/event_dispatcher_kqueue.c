@@ -43,27 +43,12 @@ static void close_and_drop_client(const int kq, client_t *c)
     if (!c)
         return;
 
-    if (server.verbose) {
-        printf("Dropping client fd=%d (%s:%d)\n", c->fd, c->ip_str, c->port);
-    }
-
     // deregister from kqueue
     struct kevent ch;
     EV_SET(&ch, c->fd, EVFILT_READ, EV_DELETE, 0, 0, NULL);
     (void)kevent(kq, &ch, 1, NULL, 0, NULL);
 
-    // remove from the server list
-    list_node_t *node = listFindNode(server.clients, NULL, c);
-    if (node) {
-        listDeleteNode(server.clients, node);
-    }
-
-    close(c->fd);
-    server.num_clients -= 1;
-    server.num_disconnected_clients += 1;
-    update_disconnected_clients(&server.metrics,
-                                server.num_disconnected_clients);
-    free_client(c);
+    server_drop_client(&server, c);
 }
 
 static int sync_client_write_interest(const int kq, client_t *c)
