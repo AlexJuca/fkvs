@@ -45,6 +45,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y clang
 
+      - name: Install Linux dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y liburing-dev
+
       - name: Ensure CMake on macOS
         if: matrix.os == 'macos-latest'
         run: |
@@ -134,7 +140,7 @@ jobs:
       - name: Install sanitizer toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang
+          sudo apt-get install -y clang liburing-dev
 
       - name: Configure CMake with sanitizers
         run: >
