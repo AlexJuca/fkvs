@@ -23,30 +23,30 @@
 #include <sys/timerfd.h>
 #include <unistd.h>
 
-#define FKVS_IO_URING_MIN_QUEUE_DEPTH 256U
-#define FKVS_IO_URING_MAX_QUEUE_DEPTH 32768U
-#define FKVS_IO_URING_QUEUE_HEADROOM 8U
-#define FKVS_TTL_SWEEP_BATCH 20U
+#define IO_URING_MIN_QUEUE_DEPTH 256U
+#define IO_URING_MAX_QUEUE_DEPTH 32768U
+#define IO_URING_QUEUE_HEADROOM 8U
+#define TTL_SWEEP_BATCH 20U
 
 typedef enum {
-    FKVS_URING_ACCEPT_READY,
-    FKVS_URING_CLIENT_READ_READY,
-    FKVS_URING_CLIENT_WRITE_READY,
-    FKVS_URING_TIMER_READY,
-} fkvs_uring_op_kind_t;
+    URING_ACCEPT_READY,
+    URING_CLIENT_READ_READY,
+    URING_CLIENT_WRITE_READY,
+    URING_TIMER_READY,
+} uring_op_kind_t;
 
-typedef struct fkvs_uring_op {
-    fkvs_uring_op_kind_t kind;
+typedef struct uring_op {
+    uring_op_kind_t kind;
     client_t *client;
-    struct fkvs_uring_op *next;
-} fkvs_uring_op_t;
+    struct uring_op *next;
+} uring_op_t;
 
 typedef struct {
     struct io_uring ring;
-    fkvs_uring_op_t *ops;
+    uring_op_t *ops;
     unsigned int outstanding_ops;
     int timer_fd;
-} fkvs_uring_dispatcher_t;
+} uring_dispatcher_t;
 
 static bool reject_if_server_at_capacity(const int cfd)
 {
@@ -70,30 +70,30 @@ static unsigned int queue_depth_for_server(void)
     if (max_clients == 0)
         max_clients = FKVS_DEFAULT_MAX_CLIENTS;
 
-    if (max_clients > FKVS_IO_URING_MAX_QUEUE_DEPTH -
-                          FKVS_IO_URING_QUEUE_HEADROOM) {
-        return FKVS_IO_URING_MAX_QUEUE_DEPTH;
+    if (max_clients > IO_URING_MAX_QUEUE_DEPTH -
+                          IO_URING_QUEUE_HEADROOM) {
+        return IO_URING_MAX_QUEUE_DEPTH;
     }
 
     const unsigned int needed =
-        (unsigned int)max_clients + FKVS_IO_URING_QUEUE_HEADROOM;
-    return needed < FKVS_IO_URING_MIN_QUEUE_DEPTH
-               ? FKVS_IO_URING_MIN_QUEUE_DEPTH
+        (unsigned int)max_clients + IO_URING_QUEUE_HEADROOM;
+    return needed < IO_URING_MIN_QUEUE_DEPTH
+               ? IO_URING_MIN_QUEUE_DEPTH
                : needed;
 }
 
-static void track_op(fkvs_uring_dispatcher_t *dispatcher,
-                     fkvs_uring_op_t *op)
+static void track_op(uring_dispatcher_t *dispatcher,
+                     uring_op_t *op)
 {
     op->next = dispatcher->ops;
     dispatcher->ops = op;
     dispatcher->outstanding_ops += 1;
 }
 
-static void untrack_op(fkvs_uring_dispatcher_t *dispatcher,
-                       fkvs_uring_op_t *op)
+static void untrack_op(uring_dispatcher_t *dispatcher,
+                       uring_op_t *op)
 {
-    fkvs_uring_op_t **cursor = &dispatcher->ops;
+    uring_op_t **cursor = &dispatcher->ops;
     while (*cursor) {
         if (*cursor == op) {
             *cursor = op->next;
@@ -105,11 +105,11 @@ static void untrack_op(fkvs_uring_dispatcher_t *dispatcher,
     }
 }
 
-static void free_tracked_ops(fkvs_uring_dispatcher_t *dispatcher)
+static void free_tracked_ops(uring_dispatcher_t *dispatcher)
 {
-    fkvs_uring_op_t *op = dispatcher->ops;
+    uring_op_t *op = dispatcher->ops;
     while (op) {
-        fkvs_uring_op_t *next = op->next;
+        uring_op_t *next = op->next;
         free(op);
         op = next;
     }
@@ -117,7 +117,7 @@ static void free_tracked_ops(fkvs_uring_dispatcher_t *dispatcher)
     dispatcher->outstanding_ops = 0;
 }
 
-static struct io_uring_sqe *get_sqe(fkvs_uring_dispatcher_t *dispatcher)
+static struct io_uring_sqe *get_sqe(uring_dispatcher_t *dispatcher)
 {
     struct io_uring_sqe *sqe = io_uring_get_sqe(&dispatcher->ring);
     if (sqe)
@@ -132,14 +132,14 @@ static struct io_uring_sqe *get_sqe(fkvs_uring_dispatcher_t *dispatcher)
     return io_uring_get_sqe(&dispatcher->ring);
 }
 
-static int submit_poll_op(fkvs_uring_dispatcher_t *dispatcher,
-                          const fkvs_uring_op_kind_t kind, client_t *client,
+static int submit_poll_op(uring_dispatcher_t *dispatcher,
+                          const uring_op_kind_t kind, client_t *client,
                           const int fd, const unsigned int poll_mask)
 {
     if (fd < 0)
         return -1;
 
-    fkvs_uring_op_t *op = calloc(1, sizeof(*op));
+    uring_op_t *op = calloc(1, sizeof(*op));
     if (!op) {
         perror("calloc io_uring op");
         return -1;
@@ -170,36 +170,36 @@ static int submit_poll_op(fkvs_uring_dispatcher_t *dispatcher,
     return 0;
 }
 
-static int submit_accept_ready(fkvs_uring_dispatcher_t *dispatcher)
+static int submit_accept_ready(uring_dispatcher_t *dispatcher)
 {
-    return submit_poll_op(dispatcher, FKVS_URING_ACCEPT_READY, NULL, server.fd,
+    return submit_poll_op(dispatcher, URING_ACCEPT_READY, NULL, server.fd,
                           POLLIN);
 }
 
-static int submit_client_read_ready(fkvs_uring_dispatcher_t *dispatcher,
+static int submit_client_read_ready(uring_dispatcher_t *dispatcher,
                                     client_t *client)
 {
-    return submit_poll_op(dispatcher, FKVS_URING_CLIENT_READ_READY, client,
+    return submit_poll_op(dispatcher, URING_CLIENT_READ_READY, client,
                           client ? client->fd : -1, POLLIN);
 }
 
-static int submit_client_write_ready(fkvs_uring_dispatcher_t *dispatcher,
+static int submit_client_write_ready(uring_dispatcher_t *dispatcher,
                                      client_t *client)
 {
     const int res =
-        submit_poll_op(dispatcher, FKVS_URING_CLIENT_WRITE_READY, client,
+        submit_poll_op(dispatcher, URING_CLIENT_WRITE_READY, client,
                        client ? client->fd : -1, POLLOUT);
     if (res == 0)
         client->write_registered = true;
     return res;
 }
 
-static int submit_timer_ready(fkvs_uring_dispatcher_t *dispatcher)
+static int submit_timer_ready(uring_dispatcher_t *dispatcher)
 {
     if (dispatcher->timer_fd < 0)
         return 0;
 
-    return submit_poll_op(dispatcher, FKVS_URING_TIMER_READY, NULL,
+    return submit_poll_op(dispatcher, URING_TIMER_READY, NULL,
                           dispatcher->timer_fd, POLLIN);
 }
 
@@ -230,7 +230,7 @@ static bool client_has_oversized_partial_frame(const client_t *client)
            (ssize_t)client->buf_used < client->frame_need;
 }
 
-static int setup_timer(fkvs_uring_dispatcher_t *dispatcher)
+static int setup_timer(uring_dispatcher_t *dispatcher)
 {
     dispatcher->timer_fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
     if (dispatcher->timer_fd < 0) {
@@ -252,7 +252,7 @@ static int setup_timer(fkvs_uring_dispatcher_t *dispatcher)
     return 0;
 }
 
-static int handle_accept_ready(fkvs_uring_dispatcher_t *dispatcher,
+static int handle_accept_ready(uring_dispatcher_t *dispatcher,
                                const int cqe_res)
 {
     if (cqe_res < 0 && !server_shutdown_requested()) {
@@ -312,7 +312,7 @@ static int handle_accept_ready(fkvs_uring_dispatcher_t *dispatcher,
     return 0;
 }
 
-static int handle_timer_ready(fkvs_uring_dispatcher_t *dispatcher,
+static int handle_timer_ready(uring_dispatcher_t *dispatcher,
                               const int cqe_res)
 {
     if (cqe_res < 0 && !server_shutdown_requested()) {
@@ -327,7 +327,7 @@ static int handle_timer_ready(fkvs_uring_dispatcher_t *dispatcher,
             read(dispatcher->timer_fd, &expirations, sizeof(expirations));
         if (nread == (ssize_t)sizeof(expirations)) {
             expire_sweep(server.database->store, server.database->expires,
-                         FKVS_TTL_SWEEP_BATCH);
+                         TTL_SWEEP_BATCH);
             continue;
         }
         if (nread < 0 && errno == EINTR)
@@ -345,7 +345,7 @@ static int handle_timer_ready(fkvs_uring_dispatcher_t *dispatcher,
     return 0;
 }
 
-static int rearm_client_after_read(fkvs_uring_dispatcher_t *dispatcher,
+static int rearm_client_after_read(uring_dispatcher_t *dispatcher,
                                    client_t *client)
 {
     if (client->wbuf_used > 0)
@@ -354,7 +354,7 @@ static int rearm_client_after_read(fkvs_uring_dispatcher_t *dispatcher,
     return submit_client_read_ready(dispatcher, client);
 }
 
-static int handle_client_read_ready(fkvs_uring_dispatcher_t *dispatcher,
+static int handle_client_read_ready(uring_dispatcher_t *dispatcher,
                                     client_t *client, const int cqe_res)
 {
     if (!client)
@@ -425,7 +425,7 @@ static int handle_client_read_ready(fkvs_uring_dispatcher_t *dispatcher,
     }
 }
 
-static int handle_client_write_ready(fkvs_uring_dispatcher_t *dispatcher,
+static int handle_client_write_ready(uring_dispatcher_t *dispatcher,
                                      client_t *client, const int cqe_res)
 {
     if (!client)
@@ -454,36 +454,36 @@ static int handle_client_write_ready(fkvs_uring_dispatcher_t *dispatcher,
     return submit_client_read_ready(dispatcher, client);
 }
 
-static int handle_cqe(fkvs_uring_dispatcher_t *dispatcher,
+static int handle_cqe(uring_dispatcher_t *dispatcher,
                       struct io_uring_cqe *cqe)
 {
-    fkvs_uring_op_t *op = io_uring_cqe_get_data(cqe);
+    uring_op_t *op = io_uring_cqe_get_data(cqe);
     const int cqe_res = cqe->res;
     io_uring_cqe_seen(&dispatcher->ring, cqe);
 
     if (!op)
         return 0;
 
-    const fkvs_uring_op_kind_t kind = op->kind;
+    const uring_op_kind_t kind = op->kind;
     client_t *client = op->client;
     untrack_op(dispatcher, op);
     free(op);
 
     switch (kind) {
-    case FKVS_URING_ACCEPT_READY:
+    case URING_ACCEPT_READY:
         return handle_accept_ready(dispatcher, cqe_res);
-    case FKVS_URING_CLIENT_READ_READY:
+    case URING_CLIENT_READ_READY:
         return handle_client_read_ready(dispatcher, client, cqe_res);
-    case FKVS_URING_CLIENT_WRITE_READY:
+    case URING_CLIENT_WRITE_READY:
         return handle_client_write_ready(dispatcher, client, cqe_res);
-    case FKVS_URING_TIMER_READY:
+    case URING_TIMER_READY:
         return handle_timer_ready(dispatcher, cqe_res);
     }
 
     return 0;
 }
 
-static void cleanup_dispatcher(fkvs_uring_dispatcher_t *dispatcher)
+static void cleanup_dispatcher(uring_dispatcher_t *dispatcher)
 {
     if (dispatcher->timer_fd >= 0) {
         close(dispatcher->timer_fd);
@@ -496,7 +496,7 @@ static void cleanup_dispatcher(fkvs_uring_dispatcher_t *dispatcher)
 
 int run_event_loop()
 {
-    fkvs_uring_dispatcher_t dispatcher = {.timer_fd = -1};
+    uring_dispatcher_t dispatcher = {.timer_fd = -1};
     set_nonblocking(server.fd);
 
     const unsigned int queue_depth = queue_depth_for_server();
