@@ -19,8 +19,8 @@ static hashtable_t *expires = NULL;
 static bool check_and_expire(const unsigned char *key, size_t key_len)
 {
     if (is_expired(expires, key, key_len)) {
-        delete_value(table, key, key_len);
         delete_value(expires, key, key_len);
+        delete_value(table, key, key_len);
         return true;
     }
     return false;
@@ -42,6 +42,7 @@ void init_command_handlers(db_t *db)
     register_command(CMD_EXPIRE, handle_expire_command);
     register_command(CMD_TTL, handle_ttl_command);
     register_command(CMD_PERSIST, handle_persist_command);
+    register_command(CMD_KEYS, handle_keys_command);
 }
 
 void handle_set_command(client_t *client, unsigned char *buffer, size_t bytes_read)
@@ -963,4 +964,99 @@ void handle_persist_command(client_t *client, unsigned char *buffer,
     remove_expiry(expires, &buffer[5], key_len);
 
     send_ok(client);
+}
+
+void handle_keys_command(client_t *client, unsigned char *buffer,
+                         size_t bytes_read)
+{
+    if (bytes_read != 3) {
+        send_error(client);
+        return;
+    }
+
+    const uint16_t core_len = ((uint16_t)buffer[0] << 8) | buffer[1];
+    if (core_len != 1 || buffer[2] != CMD_KEYS) {
+        send_error(client);
+        return;
+    }
+
+    const size_t max_output = 65500;
+    size_t capacity = 4096;
+    if (capacity > max_output) {
+        capacity = max_output;
+    }
+
+    char *buf = malloc(capacity);
+    if (!buf) {
+        send_error(client);
+        return;
+    }
+
+    size_t used = 0;
+    size_t count = 0;
+
+    for (size_t i = 0; i < table->size; i++) {
+        hash_table_entry_t *entry = table->buckets[i];
+        while (entry) {
+            hash_table_entry_t *next = entry->next;
+
+            if (check_and_expire(entry->key, entry->key_len)) {
+                entry = next;
+                continue;
+            }
+
+            // Format: "N) key\n"
+            char num_buf[24];
+            int num_len = snprintf(num_buf, sizeof(num_buf), "%zu) ", count + 1);
+            if (num_len < 0 || (size_t)num_len >= sizeof(num_buf)) {
+                free(buf);
+                send_error(client);
+                return;
+            }
+
+            size_t line_len = (size_t)num_len + entry->key_len + 1; // +1 for \n
+
+            if (line_len > max_output - used) {
+                free(buf);
+                send_error(client);
+                return;
+            }
+
+            if (used + line_len > capacity) {
+                size_t new_cap = capacity * 2;
+                if (new_cap > max_output) {
+                    new_cap = max_output;
+                }
+                if (new_cap < used + line_len) {
+                    new_cap = used + line_len;
+                }
+                char *tmp = realloc(buf, new_cap);
+                if (!tmp) {
+                    free(buf);
+                    send_error(client);
+                    return;
+                }
+                buf = tmp;
+                capacity = new_cap;
+            }
+
+            memcpy(buf + used, num_buf, num_len);
+            used += num_len;
+            memcpy(buf + used, entry->key, entry->key_len);
+            used += entry->key_len;
+            buf[used] = '\n';
+            used++;
+
+            count++;
+            entry = next;
+        }
+    }
+
+    if (count == 0) {
+        send_keys_reply(client, (const unsigned char *)"", 0);
+    } else {
+        send_keys_reply(client, (const unsigned char *)buf, used);
+    }
+
+    free(buf);
 }

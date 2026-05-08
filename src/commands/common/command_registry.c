@@ -192,6 +192,34 @@ void send_reply(client_t *client, const unsigned char *buffer,
     wbuf_append(client, buffer, bytes_read);
 }
 
+void send_keys_reply(client_t *client, const unsigned char *data,
+                     size_t data_len)
+{
+    if (client->fd < 0)
+        return;
+
+    const size_t core_cmd_len = 1 + 2 + data_len;
+    const size_t full_frame_length = 2 + core_cmd_len;
+
+    if (core_cmd_len > UINT16_MAX) {
+        send_error(client);
+        return;
+    }
+
+    if (!wbuf_reserve(client, full_frame_length))
+        return;
+
+    const unsigned char header[] = {
+        (core_cmd_len >> 8) & 0xFF,
+        core_cmd_len & 0xFF,
+        CMD_KEYS,
+        (data_len >> 8) & 0xFF,
+        data_len & 0xFF,
+    };
+    wbuf_append(client, header, sizeof(header));
+    wbuf_append(client, data, data_len);
+}
+
 void send_pong(client_t *client, const unsigned char *buffer,
                size_t bytes_read)
 {

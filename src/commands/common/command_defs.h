@@ -13,5 +13,6 @@
 #define CMD_EXPIRE  0x0A
 #define CMD_TTL     0x0B
 #define CMD_PERSIST 0x0C
+#define CMD_KEYS    0x0D
 
 #endif // COMMAND_DEFS_H

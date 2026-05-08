@@ -43,4 +43,7 @@ void handle_ttl_command(client_t *client, unsigned char *buffer,
 void handle_persist_command(client_t *client, unsigned char *buffer,
                             size_t bytes_read);
 
+void handle_keys_command(client_t *client, unsigned char *buffer,
+                         size_t bytes_read);
+
 #endif // SERVER_COMMAND_HANDLERS_H
