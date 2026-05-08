@@ -1,9 +1,12 @@
 #ifdef __linux__
 #include "../client.h"
+#include "../commands/common/command_registry.h"
 #include "../core/list.h"
 #include "../networking/modes.h"
 #include "../networking/networking.h"
 #include "../server.h"
+#include "../server_lifecycle.h"
+#include "../server_limits.h"
 #include "../ttl.h"
 #include "../utils.h"
 #include "event_dispatcher.h"
@@ -22,32 +25,52 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+static bool reject_if_server_at_capacity(const int cfd)
+{
+    if (fkvs_server_can_accept_client(&server))
+        return false;
+
+    if (server.verbose) {
+        fprintf(stderr,
+                "Rejecting client fd=%d: max-clients limit reached (%u)\n",
+                cfd, server.max_clients);
+    }
+
+    close(cfd);
+    fkvs_server_record_rejected_client(&server);
+    return true;
+}
+
 static void close_and_drop_client(const int epfd, client_t *c)
 {
     if (!c)
         return;
 
-    if (server.verbose) {
-        printf("Dropping client fd=%d (%s:%d)\n", c->fd, c->ip_str, c->port);
-    }
-
     struct epoll_event ev;
     memset(&ev, 0, sizeof(ev));
     epoll_ctl(epfd, EPOLL_CTL_DEL, c->fd, &ev);
 
-    list_node_t *node =
-        listFindNode(server.clients, NULL, (void *)(intptr_t)c->fd);
-    if (node) {
-        listDeleteNode(server.clients, node);
-        free(node->val); // free(client_t) allocated for list storage if any
-    }
+    server_drop_client(&server, c);
+}
 
-    close(c->fd);
-    server.num_clients -= 1;
-    server.num_disconnected_clients += 1;
-    update_disconnected_clients(&server.metrics,
-                                server.num_disconnected_clients);
-    free(c);
+static int sync_client_write_interest(const int epfd, client_t *c)
+{
+    const bool want_write = c->wbuf_used > 0;
+    if (c->write_registered == want_write)
+        return 0;
+
+    struct epoll_event cev;
+    memset(&cev, 0, sizeof(cev));
+    cev.events = EPOLLIN | EPOLLET | EPOLLRDHUP;
+    if (want_write)
+        cev.events |= EPOLLOUT;
+    cev.data.ptr = c;
+
+    if (epoll_ctl(epfd, EPOLL_CTL_MOD, c->fd, &cev) == -1)
+        return -1;
+
+    c->write_registered = want_write;
+    return 0;
 }
 
 int run_event_loop()
@@ -86,14 +109,17 @@ int run_event_loop()
         epoll_ctl(epfd, EPOLL_CTL_ADD, tfd, &tev);
     }
 
-    struct epoll_event events[server.event_loop_max_events];
+    const int max_evs =
+        server.event_loop_max_events > 1024 ? 1024 : server.event_loop_max_events;
+    struct epoll_event events[max_evs];
 
-    for (;;) {
-        const int n =
-            epoll_wait(epfd, events, server.event_loop_max_events, -1);
+    while (!server_shutdown_requested()) {
+        const int n = epoll_wait(epfd, events, max_evs, -1);
         if (n < 0) {
-            if (errno == EINTR)
+            if (errno == EINTR && !server_shutdown_requested())
                 continue;
+            if (errno == EINTR && server_shutdown_requested())
+                break;
             perror("epoll_wait");
             break;
         }
@@ -103,10 +129,24 @@ int run_event_loop()
 
             // Timer event for active expiration sweep
             if (tfd >= 0 && events[i].data.fd == tfd) {
-                uint64_t expirations;
-                read(tfd, &expirations, sizeof(expirations));
-                expire_sweep(server.database->store,
-                             server.database->expires, 20);
+                uint64_t expirations = 0;
+                for (;;) {
+                    const ssize_t nread =
+                        read(tfd, &expirations, sizeof(expirations));
+                    if (nread == (ssize_t)sizeof(expirations)) {
+                        expire_sweep(server.database->store,
+                                     server.database->expires, 20);
+                        break;
+                    }
+                    if (nread < 0 && errno == EINTR)
+                        continue;
+                    if (nread < 0 &&
+                        (errno == EAGAIN || errno == EWOULDBLOCK))
+                        break;
+                    if (nread < 0)
+                        perror("timerfd read");
+                    break;
+                }
                 continue;
             }
 
@@ -123,6 +163,9 @@ int run_event_loop()
                         perror("accept");
                         break;
                     }
+
+                    if (reject_if_server_at_capacity(cfd))
+                        continue;
 
                     set_nonblocking(cfd);
                     if (server.socket_domain == TCP_IP) {
@@ -176,7 +219,24 @@ int run_event_loop()
                            c ? c->fd : -1, evt);
                 }
                 close_and_drop_client(epfd, c);
+                for (int j = i + 1; j < n; j++) {
+                    if (events[j].data.ptr == c)
+                        events[j].data.ptr = NULL;
+                }
                 continue;
+            }
+
+            if (evt & EPOLLOUT) {
+                wbuf_flush(c);
+                if (c->write_failed ||
+                    sync_client_write_interest(epfd, c) == -1) {
+                    close_and_drop_client(epfd, c);
+                    for (int j = i + 1; j < n; j++) {
+                        if (events[j].data.ptr == c)
+                            events[j].data.ptr = NULL;
+                    }
+                    continue;
+                }
             }
 
             // Drain readable data (edge-triggered)
@@ -192,7 +252,14 @@ int run_event_loop()
                         }
 
                         // Process as many complete frames as possible
-                        try_process_frames(c);
+                        if (try_process_frames(c) < 0) {
+                            close_and_drop_client(epfd, c);
+                            for (int j = i + 1; j < n; j++) {
+                                if (events[j].data.ptr == c)
+                                    events[j].data.ptr = NULL;
+                            }
+                            break;
+                        }
 
                         // If buffer is full but frame needs more → protocol
                         // error
@@ -204,6 +271,10 @@ int run_event_loop()
                                     "dropping client\n",
                                     c->fd);
                             close_and_drop_client(epfd, c);
+                            for (int j = i + 1; j < n; j++) {
+                                if (events[j].data.ptr == c)
+                                    events[j].data.ptr = NULL;
+                            }
                             break;
                         }
 
@@ -216,11 +287,22 @@ int run_event_loop()
                             printf("Client fd=%d closed (recv=0)\n", c->fd);
                         }
                         close_and_drop_client(epfd, c);
+                        for (int j = i + 1; j < n; j++) {
+                            if (events[j].data.ptr == c)
+                                events[j].data.ptr = NULL;
+                        }
                         break;
                     }
 
                     if (errno == EAGAIN || errno == EWOULDBLOCK) {
                         // fully drained for now
+                        if (sync_client_write_interest(epfd, c) == -1) {
+                            close_and_drop_client(epfd, c);
+                            for (int j = i + 1; j < n; j++) {
+                                if (events[j].data.ptr == c)
+                                    events[j].data.ptr = NULL;
+                            }
+                        }
                         break;
                     }
                     if (errno == EINTR) {
@@ -230,12 +312,18 @@ int run_event_loop()
 
                     perror("recv");
                     close_and_drop_client(epfd, c);
+                    for (int j = i + 1; j < n; j++) {
+                        if (events[j].data.ptr == c)
+                            events[j].data.ptr = NULL;
+                    }
                     break;
                 }
             }
         }
     }
 
+    if (tfd >= 0)
+        close(tfd);
     close(epfd);
     return 0;
 }

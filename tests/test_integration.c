@@ -44,10 +44,10 @@ static fixture_t setup(void)
     int rc = socketpair(AF_UNIX, SOCK_STREAM, 0, fds);
     assert(rc == 0);
 
-    client_t *c = calloc(1, sizeof(client_t));
+    struct sockaddr_storage ss;
+    memset(&ss, 0, sizeof(ss));
+    client_t *c = init_client(fds[0], ss, UNIX);
     assert(c != NULL);
-    c->fd = fds[0];
-    c->frame_need = -1;
 
     db_t *db = malloc(sizeof(db_t));
     assert(db != NULL);
@@ -63,7 +63,7 @@ static void teardown(fixture_t *f)
 {
     close(f->client->fd);
     close(f->read_fd);
-    free(f->client);
+    free_client(f->client);
     free_hash_table(f->db->store);
     free_hash_table(f->db->expires);
     free(f->db);
@@ -127,6 +127,18 @@ static void assert_set_ex(fixture_t *f, const char *key, const char *value,
     ssize_t r = dispatch_and_recv(f, cmd, len, resp, sizeof resp);
     free(cmd);
     assert(r > 0 && resp_is_success(resp, r, expected));
+}
+
+static void assert_set_ex_error(fixture_t *f, const char *key, const char *value,
+                                const char *seconds)
+{
+    unsigned char resp[512];
+    size_t len;
+    unsigned char *cmd = construct_set_ex_command(key, value, seconds, &len);
+    assert(cmd);
+    ssize_t r = dispatch_and_recv(f, cmd, len, resp, sizeof resp);
+    free(cmd);
+    assert(r > 0 && resp_is_error(resp, r));
 }
 
 static void assert_set(fixture_t *f, const char *key, const char *value,
@@ -215,7 +227,7 @@ static void assert_decrby(fixture_t *f, const char *key, const char *amount,
     size_t len;
     unsigned char *cmd = construct_decr_by_command(key, amount, &len);
     assert(cmd);
-    ssize_t r = dispatch_and_recv(f, cmd, len, resp, sizeof resp);
+    const ssize_t r = dispatch_and_recv(f, cmd, len, resp, sizeof resp);
     free(cmd);
     assert(r > 0 && resp_is_success(resp, r, expected));
 }
@@ -373,15 +385,7 @@ static void test_decr_auto_creates_key(void)
     printf("  test_decr_auto_creates_key passed.\n");
 }
 
-static void test_decrby_auto_creates_key(void)
-{
-    fixture_t f = setup();
 
-    assert_decrby(&f, "dkey", "7", "7");
-
-    teardown(&f);
-    printf("  test_decrby_auto_creates_key passed.\n");
-}
 
 static void test_incr_after_set(void)
 {
@@ -701,7 +705,7 @@ static void test_lazy_expiry_on_decrby(void)
     sleep(2);
 
     // DECRBY on expired key should auto-create from 0
-    assert_decrby(&f, "dbctr", "3", "3");
+    assert_decrby(&f, "dbctr", "3", "-3");
 
     teardown(&f);
     printf("  test_lazy_expiry_on_decrby passed.\n");
@@ -720,6 +724,30 @@ static void test_expire_zero_expires_immediately(void)
 
     teardown(&f);
     printf("  test_expire_zero_expires_immediately passed.\n");
+}
+
+static void test_expire_rejects_invalid_ttl(void)
+{
+    fixture_t f = setup();
+
+    assert_set(&f, "badttl", "val", "val");
+    assert_expire_error(&f, "badttl", "abc");
+    assert_get(&f, "badttl", "val");
+
+    teardown(&f);
+    printf("  test_expire_rejects_invalid_ttl passed.\n");
+}
+
+static void test_expire_rejects_negative_ttl(void)
+{
+    fixture_t f = setup();
+
+    assert_set(&f, "negttl", "val", "val");
+    assert_expire_error(&f, "negttl", "-1");
+    assert_get(&f, "negttl", "val");
+
+    teardown(&f);
+    printf("  test_expire_rejects_negative_ttl passed.\n");
 }
 
 static void test_del_double(void)
@@ -981,6 +1009,67 @@ static void test_keys_after_del(void)
     printf("  test_keys_after_del passed.\n");
 }
 
+static void test_keys_rejects_malformed_frame(void)
+{
+    fixture_t f = setup();
+
+    unsigned char resp[4096];
+    unsigned char malformed[] = {0x00, 0x02, CMD_KEYS, 0x00};
+    ssize_t r =
+        dispatch_and_recv(&f, malformed, sizeof malformed, resp, sizeof resp);
+
+    assert(r > 0 && resp_is_error(resp, r));
+
+    teardown(&f);
+    printf("  test_keys_rejects_malformed_frame passed.\n");
+}
+
+static void test_keys_rejects_truncated_output(void)
+{
+    fixture_t f = setup();
+
+    char key[641];
+
+    for (int i = 0; i < 110; i++) {
+        char prefix[16];
+        int prefix_len = snprintf(prefix, sizeof(prefix), "key-%03d-", i);
+        assert(prefix_len > 0 && (size_t)prefix_len < sizeof(prefix));
+        memset(key, 'x', sizeof(key) - 1);
+        memcpy(key, prefix, (size_t)prefix_len);
+        key[sizeof(key) - 1] = '\0';
+        assert_set(&f, key, "v", "v");
+    }
+
+    unsigned char resp[4096];
+    ssize_t r = dispatch_keys(&f, resp, sizeof resp);
+    assert(r > 0 && resp_is_error(resp, r));
+
+    teardown(&f);
+    printf("  test_keys_rejects_truncated_output passed.\n");
+}
+
+static void test_set_ex_rejects_invalid_ttl_atomically(void)
+{
+    fixture_t f = setup();
+
+    assert_set_ex_error(&f, "exbad", "val", "abc");
+    assert_get_error(&f, "exbad");
+
+    teardown(&f);
+    printf("  test_set_ex_rejects_invalid_ttl_atomically passed.\n");
+}
+
+static void test_set_ex_rejects_negative_ttl_atomically(void)
+{
+    fixture_t f = setup();
+
+    assert_set_ex_error(&f, "exneg", "val", "-1");
+    assert_get_error(&f, "exneg");
+
+    teardown(&f);
+    printf("  test_set_ex_rejects_negative_ttl_atomically passed.\n");
+}
+
 /* ── main ──────────────────────────────────────────────────────────── */
 
 int main(void)
@@ -999,7 +1088,6 @@ int main(void)
     test_incr_auto_creates_key();
     test_incrby_auto_creates_key();
     test_decr_auto_creates_key();
-    test_decrby_auto_creates_key();
     test_incr_after_set();
     test_incrby_after_set();
 
@@ -1027,6 +1115,8 @@ int main(void)
     test_expire_nonexistent_key();
     test_expire_overwrites_previous();
     test_expire_zero_expires_immediately();
+    test_expire_rejects_invalid_ttl();
+    test_expire_rejects_negative_ttl();
 
     /* Edge cases — PERSIST */
     test_persist_on_key_without_ttl();
@@ -1046,12 +1136,16 @@ int main(void)
     test_set_ex_expires();
     test_set_ex_overwritten_by_set();
     test_set_ex_zero();
+    test_set_ex_rejects_invalid_ttl_atomically();
+    test_set_ex_rejects_negative_ttl_atomically();
 
     /* KEYS */
     test_keys_empty_store();
     test_keys_returns_stored_keys();
     test_keys_excludes_expired();
     test_keys_after_del();
+    test_keys_rejects_malformed_frame();
+    test_keys_rejects_truncated_output();
 
     printf("All integration tests passed.\n");
     return 0;

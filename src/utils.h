@@ -19,20 +19,22 @@ static inline int64_t fkvs_now_ms(void)
     return (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 }
 
-static void error_and_exit(const char *ctx, const char *file, const int line)
+static inline void error_and_exit(const char *ctx, const char *file,
+                                  const int line)
 {
     fprintf(stderr, "[%s - %d]\n", file, line);
     perror(ctx);
     exit(EXIT_FAILURE);
 }
 
-static void warn(const char *ctx, const char *file, int line)
+static inline void warn(const char *ctx, const char *file, int line)
 {
     fprintf(stderr, "[%s - %d]\n", file, line);
     perror(ctx);
 }
 
-static void print_binary_data(const unsigned char *data, const size_t len)
+static inline void print_binary_data(const unsigned char *data,
+                                     const size_t len)
 {
     for (size_t j = 0; j < len; j++) {
         const unsigned char c = data[j];
@@ -49,9 +51,9 @@ static void print_binary_data(const unsigned char *data, const size_t len)
 
 // TODO: When process is running as a daemon, ensure we don't print to standard
 // file descriptors rather we should write to a log file.
-static inline void append_to_log_file(char *ctx) {}
+static inline void append_to_log_file(char *ctx) { (void)ctx; }
 
-static void log_std_out(char *ctx)
+static inline void log_std_out(char *ctx)
 {
     const time_t ct = time(NULL);
     char ts[32];
@@ -61,12 +63,12 @@ static void log_std_out(char *ctx)
     fprintf(stdout, "%s - %s \n", ts, ctx);
 }
 
-static void _log(char *ctx)
+static inline void _log(char *ctx)
 {
     server.daemonize ? append_to_log_file(ctx) : log_std_out(ctx);
 }
 
-static bool is_integer(const unsigned char *str, const size_t len)
+static inline bool is_integer(const unsigned char *str, const size_t len)
 {
     if (len == 0) {
         return false;
@@ -91,7 +93,7 @@ static bool is_integer(const unsigned char *str, const size_t len)
     return true;
 }
 
-static char *uint64_to_string(const uint64_t number)
+static inline char *uint64_to_string(const uint64_t number)
 {
     char *buffer = malloc(22 * sizeof(char));
     if (buffer == NULL) {
@@ -102,20 +104,20 @@ static char *uint64_to_string(const uint64_t number)
     return buffer;
 }
 
-static char *int64_to_string(const int64_t number)
+static inline char *int64_to_string(const int64_t number)
 {
     char *buffer = malloc(32);
     if (buffer == NULL) {
         return NULL;
     }
 
-    snprintf(buffer, 22, "%" PRId64, number);
+    snprintf(buffer, 32, "%" PRId64, number);
     return buffer;
 }
 
 // Adds two decimal integer strings (can include leading '+' or '-')
 // Returns a newly allocated string with the exact result.
-static char *add_strings(const char *a, const char *b)
+static inline char *add_strings(const char *a, const char *b)
 {
     // TODO: Handle signs: currently we'll only support non-negative for
     // simplicity.
@@ -162,8 +164,8 @@ static char *add_strings(const char *a, const char *b)
     return cleaned;
 }
 
-static void format_uptime(const counter_t *counter, char *buffer,
-                          size_t buffer_len)
+static inline void format_uptime(const counter_t *counter, char *buffer,
+                                 size_t buffer_len)
 {
     const time_t uptime_seconds = time(NULL) - counter->start_time;
     const int days = uptime_seconds / 86400;

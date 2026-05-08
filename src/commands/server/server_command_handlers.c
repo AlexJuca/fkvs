@@ -1,12 +1,13 @@
 #include "../../commands/server/server_command_handlers.h"
 #include "../../core/hashtable.h"
+#include "../../numeric_parse.h"
 #include "../../response_defs.h"
 #include "../../ttl.h"
 #include "../../utils.h"
 #include "../common/command_defs.h"
 #include "../common/command_registry.h"
 
-#include <assert.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/errno.h>
@@ -18,8 +19,8 @@ static hashtable_t *expires = NULL;
 static bool check_and_expire(const unsigned char *key, size_t key_len)
 {
     if (is_expired(expires, key, key_len)) {
-        delete_value(table, key, key_len);
         delete_value(expires, key, key_len);
+        delete_value(table, key, key_len);
         return true;
     }
     return false;
@@ -69,7 +70,6 @@ void handle_set_command(client_t *client, unsigned char *buffer, size_t bytes_re
         return;
     }
 
-    assert(buffer[2] == CMD_SET);
     if (buffer[2] != CMD_SET) {
         send_error(client);
         fprintf(stderr, "SET parse error: wrong command byte (%u)\n",
@@ -115,22 +115,21 @@ void handle_set_command(client_t *client, unsigned char *buffer, size_t bytes_re
     }
 
     char *data = malloc(value_len + 1);
+    if (!data) {
+        send_error(client);
+        return;
+    }
     memcpy(data, &buffer[pos_value], value_len);
+    data[value_len] = '\0';
 
     if (server.verbose) {
         printf("Wrote value '%s' to database \n", data);
         printf("Wrote %d bytes to database \n", value_len);
     }
 
-    if (is_integer(&buffer[pos_value], value_len)) {
-        set_value(table, &buffer[pos_key], key_len, &buffer[pos_value],
-                  value_len, VALUE_ENTRY_TYPE_INT);
-    } else {
-        set_value(table, &buffer[pos_key], key_len, &buffer[pos_value],
-                  value_len, VALUE_ENTRY_TYPE_RAW);
-    }
-
     // Check for optional inline EX (extra bytes after value in core)
+    bool has_expiry = false;
+    int64_t deadline_ms = 0;
     if (core_payload_size < core_len) {
         // Parse [ex_len:2][ex_str]
         const size_t ex_offset = end_value;
@@ -158,25 +157,94 @@ void handle_set_command(client_t *client, unsigned char *buffer, size_t bytes_re
         memcpy(sec_buf, &buffer[pos_ex], copy_len);
         sec_buf[copy_len] = '\0';
 
-        int64_t seconds = strtoll(sec_buf, NULL, 10);
-        int64_t deadline_ms = fkvs_now_ms() + seconds * 1000;
-        set_expiry(expires, &buffer[pos_key], key_len, deadline_ms);
+        if (copy_len != ex_len ||
+            !fkvs_parse_deadline_ms((const unsigned char *)sec_buf, copy_len,
+                                    fkvs_now_ms(), &deadline_ms)) {
+            send_error(client);
+            fprintf(stderr, "Invalid SET EX ttl value\n");
+            free(data);
+            return;
+        }
+        has_expiry = true;
+    }
+
+    int64_t parsed_integer;
+    const int value_encoding = fkvs_parse_i64_decimal(
+                                   &buffer[pos_value], value_len, INT64_MIN,
+                                   INT64_MAX, &parsed_integer)
+                                   ? VALUE_ENTRY_TYPE_INT
+                                   : VALUE_ENTRY_TYPE_RAW;
+
+    value_entry_t *old_value = NULL;
+    value_entry_t *old_expiry = NULL;
+    size_t old_value_len = 0;
+    size_t old_expiry_len = 0;
+    const bool had_value =
+        has_expiry && get_value(table, &buffer[pos_key], key_len, &old_value,
+                                &old_value_len);
+    const bool had_expiry =
+        has_expiry && get_value(expires, &buffer[pos_key], key_len,
+                                &old_expiry, &old_expiry_len);
+
+    if (!set_value(table, &buffer[pos_key], key_len, &buffer[pos_value],
+                   value_len, value_encoding)) {
+        send_error(client);
+        fprintf(stderr, "Unable to store SET value\n");
+        free_value_entry(old_value);
+        free_value_entry(old_expiry);
+        free(data);
+        return;
+    }
+
+    if (has_expiry) {
+        if (!set_expiry(expires, &buffer[pos_key], key_len, deadline_ms)) {
+            send_error(client);
+            fprintf(stderr, "Unable to store SET EX ttl\n");
+            if (had_value) {
+                (void)set_value(table, &buffer[pos_key], key_len,
+                                old_value->ptr, old_value->value_len,
+                                old_value->encoding);
+            } else {
+                delete_value(table, &buffer[pos_key], key_len);
+            }
+            if (had_expiry) {
+                (void)set_value(expires, &buffer[pos_key], key_len,
+                                old_expiry->ptr, old_expiry->value_len,
+                                old_expiry->encoding);
+            } else {
+                delete_value(expires, &buffer[pos_key], key_len);
+            }
+            free_value_entry(old_value);
+            free_value_entry(old_expiry);
+            free(data);
+            return;
+        }
     } else {
         // SET clears any existing TTL (matching Redis behavior)
         remove_expiry(expires, &buffer[pos_key], key_len);
     }
 
     send_reply(client, &buffer[pos_value], value_len);
+    free_value_entry(old_value);
+    free_value_entry(old_expiry);
     free(data);
 }
 
 void handle_get_command(client_t *client, unsigned char *buffer, size_t bytes_read)
 {
+    if (bytes_read < 5) {
+        send_error(client);
+        return;
+    }
+
     const size_t command_len = buffer[0] << 8 | buffer[1];
 
     const size_t key_len = buffer[3] << 8 | buffer[4];
 
-    assert(buffer[2] == CMD_GET);
+    if (buffer[2] != CMD_GET) {
+        send_error(client);
+        return;
+    }
 
     if (bytes_read - 2 == command_len) {
         // Lazy expiry check
@@ -192,20 +260,16 @@ void handle_get_command(client_t *client, unsigned char *buffer, size_t bytes_re
             if (!resp_buffer) {
                 send_error(client);
                 perror("malloc failed");
-                free(value->ptr);
-                free(value);
+                free_value_entry(value);
                 return;
             }
 
             memcpy(resp_buffer, value->ptr, value_len);
 
-            assert(client->fd > 0);
-
             resp_buffer[value_len] = '\0';
             send_reply(client, resp_buffer, value_len);
             free(resp_buffer);
-            free(value->ptr);
-            free(value);
+            free_value_entry(value);
         } else {
             send_error(client);
         }
@@ -218,13 +282,23 @@ void handle_get_command(client_t *client, unsigned char *buffer, size_t bytes_re
 void handle_incr_command(client_t *client, unsigned char *buffer,
                          size_t bytes_read)
 {
+    if (bytes_read < 5) {
+        send_error(client);
+        return;
+    }
+
     const size_t command_length = (buffer[0] << 8) | buffer[1];
     const size_t key_len = buffer[3] << 8 | buffer[4];
     const size_t offset = 2;
 
-    assert(key_len >= 1);
-    assert(command_length >= 1);
-    assert(buffer[2] == CMD_INCR);
+    if (key_len < 1 || command_length < 1) {
+        send_error(client);
+        return;
+    }
+    if (buffer[2] != CMD_INCR) {
+        send_error(client);
+        return;
+    }
 
     if (bytes_read - offset != command_length) {
         fprintf(stderr, "Incomplete command data for INCR.\n");
@@ -248,26 +322,40 @@ void handle_incr_command(client_t *client, unsigned char *buffer,
             send_error(client);
             return;
         }
-        get_value(table, &buffer[5], key_len, &value, &value_len);
+        if (!get_value(table, &buffer[5], key_len, &value, &value_len)) {
+            send_error(client);
+            return;
+        }
     }
 
     if (value->encoding != VALUE_ENTRY_TYPE_INT) {
         fprintf(stderr, "Stored value is not an integer.\n");
         send_error(client);
-        free(value->ptr);
-        free(value);
+        free_value_entry(value);
         return;
     }
 
-    const uint64_t current = strtoull(value->ptr, NULL, 10);
-    const uint64_t sum = current + 1;
-    assert(sum == current + 1);
+    int64_t current;
+    if (!fkvs_parse_i64_decimal(value->ptr, value_len, INT64_MIN, INT64_MAX,
+                                &current) ||
+        current == INT64_MAX) {
+        fprintf(stderr, "Stored integer is out of range.\n");
+        send_error(client);
+        free_value_entry(value);
+        return;
+    }
+    const int64_t sum = current + 1;
 
     if (server.verbose) {
-        printf("Value incremented to %llu\n", sum);
+        printf("Value incremented to %lld\n", (long long)sum);
     }
 
-    char *reply = uint64_to_string(sum);
+    char *reply = int64_to_string(sum);
+    if (!reply) {
+        send_error(client);
+        free_value_entry(value);
+        return;
+    }
     const size_t reply_len = strlen(reply);
 
     if (!set_value(table, &buffer[5], key_len, reply, reply_len,
@@ -275,27 +363,33 @@ void handle_incr_command(client_t *client, unsigned char *buffer,
         fprintf(stderr, "Unable to set incremented value.\n");
         send_error(client);
         free(reply);
-        free(value->ptr);
-        free(value);
+        free_value_entry(value);
         return;
     }
 
     send_reply(client, (const unsigned char *)reply, reply_len);
     free(reply);
-    free(value->ptr);
-    free(value);
+    free_value_entry(value);
 }
 
 void handle_incr_by_command(client_t *client, unsigned char *buffer,
                             const size_t bytes_read)
 {
+    if (bytes_read < 5) {
+        send_error(client);
+        return;
+    }
+
     const size_t command_length = buffer[0] << 8 | buffer[1];
     const size_t key_len = buffer[3] << 8 | buffer[4];
     const size_t key_position_offset = 5;
     const size_t pos = key_position_offset + key_len;
     const size_t offset = 2;
 
-    assert(buffer[2] == CMD_INCR_BY);
+    if (buffer[2] != CMD_INCR_BY) {
+        send_error(client);
+        return;
+    }
 
     if (pos + offset > bytes_read) {
         fprintf(stderr, "Invalid buffer: too short for value length.\n");
@@ -310,23 +404,19 @@ void handle_incr_by_command(client_t *client, unsigned char *buffer,
         return;
     }
 
-    unsigned char *incr_str = malloc(pos + offset + value_length);
+    unsigned char *incr_str = malloc(value_length + 1);
     if (!incr_str) {
         send_error(client);
         return;
     }
 
     memcpy(incr_str, buffer + pos + offset, value_length);
-
-    if (!is_integer(incr_str, value_length)) {
-        fprintf(stderr, "Increment value is not an integer.\n");
-        send_error(client);
-        return;
-    }
+    incr_str[value_length] = '\0';
 
     if (bytes_read - offset != command_length) {
         fprintf(stderr, "Incomplete command data for INCR_BY.\n");
         send_error(client);
+        free(incr_str);
         return;
     }
 
@@ -346,58 +436,85 @@ void handle_incr_by_command(client_t *client, unsigned char *buffer,
             free(incr_str);
             return;
         }
-        get_value(table, &buffer[5], key_len, &old_value, &old_value_len);
+        if (!get_value(table, &buffer[5], key_len, &old_value,
+                       &old_value_len)) {
+            send_error(client);
+            free(incr_str);
+            return;
+        }
     }
 
     if (old_value->encoding != VALUE_ENTRY_TYPE_INT) {
         fprintf(stderr, "Stored value is not an integer.\n");
         send_error(client);
-        free(old_value->ptr);
-        free(old_value);
+        free_value_entry(old_value);
         free(incr_str);
         return;
     }
 
-    const uint64_t current = strtoull(old_value->ptr, NULL, 10);
-    const uint64_t increment = strtoull((const char *)incr_str, NULL, 10);
-
-    const uint64_t sum = current + increment;
-    if (server.verbose) {
-        printf("Value incremented to %llu\n", sum);
+    int64_t current;
+    int64_t increment;
+    if (!fkvs_parse_i64_decimal(old_value->ptr, old_value_len, INT64_MIN,
+                                INT64_MAX, &current) ||
+        !fkvs_parse_i64_decimal(incr_str, value_length, INT64_MIN, INT64_MAX,
+                                &increment) ||
+        (increment > 0 && current > INT64_MAX - increment) ||
+        (increment < 0 && current < INT64_MIN - increment)) {
+        fprintf(stderr, "Integer increment is out of range.\n");
+        send_error(client);
+        free_value_entry(old_value);
+        free(incr_str);
+        return;
     }
 
-    const char *result = uint64_to_string(sum);
+    const int64_t sum = current + increment;
+    if (server.verbose) {
+        printf("Value incremented to %lld\n", (long long)sum);
+    }
+
+    char *result = int64_to_string(sum);
+    if (!result) {
+        send_error(client);
+        free_value_entry(old_value);
+        free(incr_str);
+        return;
+    }
     const size_t result_len = strlen(result);
 
     if (!set_value(table, &buffer[5], key_len, (unsigned char *)result,
                    result_len, VALUE_ENTRY_TYPE_INT)) {
         fprintf(stderr, "Unable to set incremented value.\n");
         send_error(client);
-        free(old_value->ptr);
-        free(old_value);
+        free_value_entry(old_value);
         free(incr_str);
+        free(result);
         return;
     }
 
-    assert(client->fd > 0);
-    assert(result_len >= 1);
-
     send_reply(client, (unsigned char *)result, result_len);
-    free(old_value->ptr);
-    free(old_value);
+    free_value_entry(old_value);
     free(incr_str);
+    free(result);
 }
 
 void handle_decr_by_command(client_t *client, unsigned char *buffer,
                             const size_t bytes_read)
 {
+    if (bytes_read < 5) {
+        send_error(client);
+        return;
+    }
+
     const size_t command_length = buffer[0] << 8 | buffer[1];
     const size_t key_len = buffer[3] << 8 | buffer[4];
     const size_t key_position_offset = 5;
     const size_t pos = key_position_offset + key_len;
     const size_t offset = 2;
 
-    assert(buffer[2] == CMD_DECR_BY);
+    if (buffer[2] != CMD_DECR_BY) {
+        send_error(client);
+        return;
+    }
 
     if (pos + offset > bytes_read) {
         fprintf(stderr, "Invalid buffer: too short for value length.\n");
@@ -412,23 +529,19 @@ void handle_decr_by_command(client_t *client, unsigned char *buffer,
         return;
     }
 
-    unsigned char *decr_str = malloc(pos + offset + value_length);
+    unsigned char *decr_str = malloc(value_length + 1);
     if (!decr_str) {
         send_error(client);
         return;
     }
 
     memcpy(decr_str, buffer + pos + offset, value_length);
-
-    if (!is_integer(decr_str, value_length)) {
-        fprintf(stderr, "Increment value is not an integer.\n");
-        send_error(client);
-        return;
-    }
+    decr_str[value_length] = '\0';
 
     if (bytes_read - offset != command_length) {
         fprintf(stderr, "Incomplete command data for DECR_BY.\n");
         send_error(client);
+        free(decr_str);
         return;
     }
 
@@ -439,58 +552,92 @@ void handle_decr_by_command(client_t *client, unsigned char *buffer,
     size_t old_value_len;
     if (!get_value(table, &buffer[5], key_len, &old_value, &old_value_len)) {
         const char *default_value = "0";
-        const int default_value_len = strlen(default_value);
-        if (!set_value(table, &buffer[5], key_len, (unsigned char *)default_value,
-                   default_value_len, VALUE_ENTRY_TYPE_INT)) {
-          fprintf(stderr, "Unable to set default value.\n");
-          send_error(client);
-          free(old_value);
-          return;
+        const size_t default_value_len = strlen(default_value);
+        if (!set_value(table, &buffer[5], key_len,
+                       (unsigned char *)default_value, default_value_len,
+                       VALUE_ENTRY_TYPE_INT)) {
+            fprintf(stderr, "Unable to set default value.\n");
+            send_error(client);
+            free(decr_str);
+            return;
         }
 
-        get_value(table, &buffer[5], key_len, &old_value, &old_value_len);
+        if (!get_value(table, &buffer[5], key_len, &old_value,
+                       &old_value_len)) {
+            send_error(client);
+            free(decr_str);
+            return;
+        }
     }
 
     if (old_value->encoding != VALUE_ENTRY_TYPE_INT) {
         fprintf(stderr, "Stored value is not an integer.\n");
         send_error(client);
-        free(old_value);
+        free_value_entry(old_value);
+        free(decr_str);
         return;
     }
 
-    const uint64_t current = strtoull(old_value->ptr, NULL, 10);
-    const uint64_t increment = strtoull((const char *)decr_str, NULL, 10);
-
-    const uint64_t sum = current + increment;
-    if (server.verbose) {
-        printf("Value incremented to %llu\n", sum);
+    int64_t current;
+    int64_t decrement;
+    if (!fkvs_parse_i64_decimal(old_value->ptr, old_value_len, INT64_MIN,
+                                INT64_MAX, &current) ||
+        !fkvs_parse_i64_decimal(decr_str, value_length, INT64_MIN, INT64_MAX,
+                                &decrement) ||
+        (decrement > 0 && current < INT64_MIN + decrement) ||
+        (decrement < 0 && current > INT64_MAX + decrement)) {
+        fprintf(stderr, "Integer decrement is out of range.\n");
+        send_error(client);
+        free_value_entry(old_value);
+        free(decr_str);
+        return;
     }
 
-    const char *result = uint64_to_string(sum);
+    const int64_t result_val = current - decrement;
+    if (server.verbose) {
+        printf("Value decremented to %lld\n", (long long)result_val);
+    }
+
+    char *result = int64_to_string(result_val);
+    if (!result) {
+        send_error(client);
+        free_value_entry(old_value);
+        free(decr_str);
+        return;
+    }
     const size_t result_len = strlen(result);
 
     if (!set_value(table, &buffer[5], key_len, (unsigned char *)result,
                    result_len, VALUE_ENTRY_TYPE_INT)) {
         fprintf(stderr, "Unable to set decremented value.\n");
         send_error(client);
-        free(old_value);
+        free_value_entry(old_value);
+        free(decr_str);
+        free(result);
         return;
     }
 
-    assert(client->fd > 0);
-    assert(result_len >= 1);
-
     send_reply(client, (unsigned char *)result, result_len);
-    free(old_value);
+    free_value_entry(old_value);
+    free(decr_str);
+    free(result);
 }
 
 void handle_ping_command(client_t *client, unsigned char *buffer,
                          size_t bytes_read)
 {
+    if (bytes_read < 5) {
+        send_error(client);
+        return;
+    }
+
     const size_t command_length = buffer[0] << 8 | buffer[1];
     const size_t offset = 2;
 
-    assert(buffer[2] == CMD_PING);
+    if (buffer[2] != CMD_PING) {
+        send_error(client);
+        return;
+    }
 
     if (server.verbose) {
         printf("Server received %d bytes from client %d \n", (int)bytes_read,
@@ -499,11 +646,9 @@ void handle_ping_command(client_t *client, unsigned char *buffer,
     }
 
     if (bytes_read - offset == command_length) {
-        assert(client->fd > 0);
-        send_pong(client, buffer);
+        send_pong(client, buffer, bytes_read);
     } else {
         fprintf(stderr, "Incomplete command data for PING.\n");
-        assert(client->fd > 0);
         send_error(client);
     }
 }
@@ -511,7 +656,10 @@ void handle_ping_command(client_t *client, unsigned char *buffer,
 void handle_info_command(client_t *client, unsigned char *buffer,
                          size_t bytes_read)
 {
-    assert(buffer[2] == CMD_INFO);
+    if (bytes_read < 3 || buffer[2] != CMD_INFO) {
+        send_error(client);
+        return;
+    }
 
     if (server.verbose) {
         printf("INFO command received. Gathering and returning metrics...\n");
@@ -549,26 +697,32 @@ void handle_info_command(client_t *client, unsigned char *buffer,
         server.num_clients, server.metrics.disconnected_clients,
         server.metrics.num_executed_commands, server.metrics.memory_usage,
         server.metrics.memory_usage / 1024);
-    if (n < 0 || n >= sizeof(metrics)) {
+    if (n < 0 || (size_t)n >= sizeof(metrics)) {
         fprintf(stderr, "Formatting error or buffer overflow while preparing "
                         "metrics reply.\n");
         send_error(client);
         return;
     }
 
-    assert(client->fd > 0);
-
-    send_reply(client, metrics, n);
+    send_reply(client, (const unsigned char *)metrics, n);
 }
 
 void handle_decr_command(client_t *client, unsigned char *buffer,
                          size_t bytes_read)
 {
+    if (bytes_read < 5) {
+        send_error(client);
+        return;
+    }
+
     const size_t command_length = buffer[0] << 8 | buffer[1];
     const size_t key_len = buffer[3] << 8 | buffer[4];
     const size_t offset = 2;
 
-    assert(buffer[2] == CMD_DECR);
+    if (buffer[2] != CMD_DECR) {
+        send_error(client);
+        return;
+    }
 
     if (bytes_read - offset != command_length) {
         fprintf(stderr, "Incomplete command data for DECR.\n");
@@ -591,48 +745,67 @@ void handle_decr_command(client_t *client, unsigned char *buffer,
             send_error(client);
             return;
         }
-        get_value(table, &buffer[5], key_len, &value, &value_len);
+        if (!get_value(table, &buffer[5], key_len, &value, &value_len)) {
+            send_error(client);
+            return;
+        }
     }
 
-    if (!is_integer(value->ptr, value_len)) {
+    if (value->encoding != VALUE_ENTRY_TYPE_INT) {
         fprintf(stderr, "Stored value is not an integer.\n");
         send_error(client);
-        free(value->ptr);
-        free(value);
+        free_value_entry(value);
         return;
     }
 
-    const int64_t current = strtoll(value->ptr, NULL, 10);
+    int64_t current;
+    if (!fkvs_parse_i64_decimal(value->ptr, value_len, INT64_MIN, INT64_MAX,
+                                &current) ||
+        current == INT64_MIN) {
+        fprintf(stderr, "Stored integer is out of range.\n");
+        send_error(client);
+        free_value_entry(value);
+        return;
+    }
     const int64_t decrement = current - 1;
 
-    const char *result_str = int64_to_string(decrement);
+    char *result_str = int64_to_string(decrement);
+    if (!result_str) {
+        send_error(client);
+        free_value_entry(value);
+        return;
+    }
     const size_t result_length = strlen(result_str);
-
-    assert(result_length > 0);
 
     if (!set_value(table, &buffer[5], key_len, (unsigned char *)result_str,
                    result_length, VALUE_ENTRY_TYPE_INT)) {
         fprintf(stderr, "Unable to set decremented value.\n");
         send_error(client);
-        free(value->ptr);
-        free(value);
+        free_value_entry(value);
+        free(result_str);
         return;
     }
 
-    assert(client->fd > 0);
-
     send_reply(client, (unsigned char *)result_str, result_length);
-    free(value->ptr);
-    free(value);
+    free_value_entry(value);
+    free(result_str);
 }
 
 void handle_del_command(client_t *client, unsigned char *buffer,
                         size_t bytes_read)
 {
+    if (bytes_read < 5) {
+        send_error(client);
+        return;
+    }
+
     const size_t command_len = buffer[0] << 8 | buffer[1];
     const size_t key_len = buffer[3] << 8 | buffer[4];
 
-    assert(buffer[2] == CMD_DEL);
+    if (buffer[2] != CMD_DEL) {
+        send_error(client);
+        return;
+    }
 
     if (bytes_read - 2 != command_len) {
         fprintf(stderr, "Incomplete command data for DEL.\n");
@@ -656,7 +829,10 @@ void handle_expire_command(client_t *client, unsigned char *buffer,
 
     const uint16_t core_len = ((uint16_t)buffer[0] << 8) | buffer[1];
 
-    assert(buffer[2] == CMD_EXPIRE);
+    if (buffer[2] != CMD_EXPIRE) {
+        send_error(client);
+        return;
+    }
 
     if (bytes_read - 2 < core_len) {
         send_error(client);
@@ -688,19 +864,27 @@ void handle_expire_command(client_t *client, unsigned char *buffer,
         send_error(client);
         return;
     }
-    free(val->ptr);
-    free(val);
+    free_value_entry(val);
 
     // Parse seconds string
     char sec_buf[32];
-    size_t copy_len = ttl_str_len < sizeof(sec_buf) - 1 ? ttl_str_len : sizeof(sec_buf) - 1;
+    size_t copy_len =
+        ttl_str_len < sizeof(sec_buf) - 1 ? ttl_str_len : sizeof(sec_buf) - 1;
     memcpy(sec_buf, &buffer[pos_ttl], copy_len);
     sec_buf[copy_len] = '\0';
 
-    int64_t seconds = strtoll(sec_buf, NULL, 10);
-    int64_t deadline_ms = fkvs_now_ms() + seconds * 1000;
+    int64_t deadline_ms;
+    if (copy_len != ttl_str_len ||
+        !fkvs_parse_deadline_ms((const unsigned char *)sec_buf, copy_len,
+                                fkvs_now_ms(), &deadline_ms)) {
+        send_error(client);
+        return;
+    }
 
-    set_expiry(expires, &buffer[pos_key], key_len, deadline_ms);
+    if (!set_expiry(expires, &buffer[pos_key], key_len, deadline_ms)) {
+        send_error(client);
+        return;
+    }
 
     send_ok(client);
 }
@@ -708,10 +892,18 @@ void handle_expire_command(client_t *client, unsigned char *buffer,
 void handle_ttl_command(client_t *client, unsigned char *buffer,
                         size_t bytes_read)
 {
+    if (bytes_read < 5) {
+        send_error(client);
+        return;
+    }
+
     const size_t command_len = buffer[0] << 8 | buffer[1];
     const size_t key_len = buffer[3] << 8 | buffer[4];
 
-    assert(buffer[2] == CMD_TTL);
+    if (buffer[2] != CMD_TTL) {
+        send_error(client);
+        return;
+    }
 
     if (bytes_read - 2 != command_len) {
         fprintf(stderr, "Incomplete command data for TTL.\n");
@@ -727,8 +919,7 @@ void handle_ttl_command(client_t *client, unsigned char *buffer,
     size_t val_len;
     bool key_exists = get_value(table, &buffer[5], key_len, &val, &val_len);
     if (key_exists) {
-        free(val->ptr);
-        free(val);
+        free_value_entry(val);
     }
 
     int64_t ttl;
@@ -736,7 +927,8 @@ void handle_ttl_command(client_t *client, unsigned char *buffer,
         ttl = -2;
     } else {
         ttl = get_ttl(expires, &buffer[5], key_len);
-        // get_ttl returns -2 if not in expires table; for existing key with no TTL, return -1
+        // get_ttl returns -2 if not in expires table; for existing key with
+        // no TTL, return -1.
         if (ttl == -2)
             ttl = -1;
     }
@@ -750,10 +942,18 @@ void handle_ttl_command(client_t *client, unsigned char *buffer,
 void handle_persist_command(client_t *client, unsigned char *buffer,
                             size_t bytes_read)
 {
+    if (bytes_read < 5) {
+        send_error(client);
+        return;
+    }
+
     const size_t command_len = buffer[0] << 8 | buffer[1];
     const size_t key_len = buffer[3] << 8 | buffer[4];
 
-    assert(buffer[2] == CMD_PERSIST);
+    if (buffer[2] != CMD_PERSIST) {
+        send_error(client);
+        return;
+    }
 
     if (bytes_read - 2 != command_len) {
         fprintf(stderr, "Incomplete command data for PERSIST.\n");
@@ -769,7 +969,16 @@ void handle_persist_command(client_t *client, unsigned char *buffer,
 void handle_keys_command(client_t *client, unsigned char *buffer,
                          size_t bytes_read)
 {
-    assert(buffer[2] == CMD_KEYS);
+    if (bytes_read != 3) {
+        send_error(client);
+        return;
+    }
+
+    const uint16_t core_len = ((uint16_t)buffer[0] << 8) | buffer[1];
+    if (core_len != 1 || buffer[2] != CMD_KEYS) {
+        send_error(client);
+        return;
+    }
 
     const size_t max_output = 65500;
     size_t capacity = 4096;
@@ -785,9 +994,8 @@ void handle_keys_command(client_t *client, unsigned char *buffer,
 
     size_t used = 0;
     size_t count = 0;
-    bool truncated = false;
 
-    for (size_t i = 0; i < table->size && !truncated; i++) {
+    for (size_t i = 0; i < table->size; i++) {
         hash_table_entry_t *entry = table->buckets[i];
         while (entry) {
             hash_table_entry_t *next = entry->next;
@@ -800,12 +1008,18 @@ void handle_keys_command(client_t *client, unsigned char *buffer,
             // Format: "N) key\n"
             char num_buf[24];
             int num_len = snprintf(num_buf, sizeof(num_buf), "%zu) ", count + 1);
+            if (num_len < 0 || (size_t)num_len >= sizeof(num_buf)) {
+                free(buf);
+                send_error(client);
+                return;
+            }
 
             size_t line_len = (size_t)num_len + entry->key_len + 1; // +1 for \n
 
-            if (used + line_len > max_output) {
-                truncated = true;
-                break;
+            if (line_len > max_output - used) {
+                free(buf);
+                send_error(client);
+                return;
             }
 
             if (used + line_len > capacity) {
@@ -818,8 +1032,9 @@ void handle_keys_command(client_t *client, unsigned char *buffer,
                 }
                 char *tmp = realloc(buf, new_cap);
                 if (!tmp) {
-                    truncated = true;
-                    break;
+                    free(buf);
+                    send_error(client);
+                    return;
                 }
                 buf = tmp;
                 capacity = new_cap;

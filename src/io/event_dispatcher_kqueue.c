@@ -1,9 +1,12 @@
 #ifdef __APPLE__
 
 #include "../client.h"
+#include "../commands/common/command_registry.h"
 #include "../core/list.h"
 #include "../networking/networking.h"
 #include "../server.h"
+#include "../server_lifecycle.h"
+#include "../server_limits.h"
 #include "../ttl.h"
 #include "../utils.h"
 #include "event_dispatcher.h"
@@ -19,34 +22,55 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+static bool reject_if_server_at_capacity(const int cfd)
+{
+    if (fkvs_server_can_accept_client(&server))
+        return false;
+
+    if (server.verbose) {
+        fprintf(stderr,
+                "Rejecting client fd=%d: max-clients limit reached (%u)\n",
+                cfd, server.max_clients);
+    }
+
+    close(cfd);
+    fkvs_server_record_rejected_client(&server);
+    return true;
+}
+
 static void close_and_drop_client(const int kq, client_t *c)
 {
     if (!c)
         return;
-
-    if (server.verbose) {
-        printf("Dropping client fd=%d (%s:%d)\n", c->fd, c->ip_str, c->port);
-    }
 
     // deregister from kqueue
     struct kevent ch;
     EV_SET(&ch, c->fd, EVFILT_READ, EV_DELETE, 0, 0, NULL);
     (void)kevent(kq, &ch, 1, NULL, 0, NULL);
 
-    // remove from the server list
-    list_node_t *node =
-        listFindNode(server.clients, NULL, (void *)(intptr_t)c->fd);
-    if (node) {
-        listDeleteNode(server.clients, node);
-        free(node->val); // free(client_t)
+    server_drop_client(&server, c);
+}
+
+static int sync_client_write_interest(const int kq, client_t *c)
+{
+    const bool want_write = c->wbuf_used > 0;
+    if (c->write_registered == want_write)
+        return 0;
+
+    struct kevent ch;
+    EV_SET(&ch, c->fd, EVFILT_WRITE,
+           want_write ? (EV_ADD | EV_ENABLE) : EV_DELETE, 0, 0, c);
+
+    if (kevent(kq, &ch, 1, NULL, 0, NULL) == -1) {
+        if (!want_write && errno == ENOENT) {
+            c->write_registered = false;
+            return 0;
+        }
+        return -1;
     }
 
-    close(c->fd);
-    server.num_clients -= 1;
-    server.num_disconnected_clients += 1;
-    update_disconnected_clients(&server.metrics,
-                                server.num_disconnected_clients);
-    free(c);
+    c->write_registered = want_write;
+    return 0;
 }
 
 int run_event_loop()
@@ -76,14 +100,17 @@ int run_event_loop()
         perror("kevent register (timer)");
     }
 
-    struct kevent evs[server.event_loop_max_events];
+    const int max_evs =
+        server.event_loop_max_events > 1024 ? 1024 : server.event_loop_max_events;
+    struct kevent evs[max_evs];
 
-    for (;;) {
-        const int n =
-            kevent(kq, NULL, 0, evs, server.event_loop_max_events, NULL);
+    while (!server_shutdown_requested()) {
+        const int n = kevent(kq, NULL, 0, evs, max_evs, NULL);
         if (n < 0) {
-            if (errno == EINTR)
+            if (errno == EINTR && !server_shutdown_requested())
                 continue;
+            if (errno == EINTR && server_shutdown_requested())
+                break;
             perror("kevent wait");
             break;
         }
@@ -112,6 +139,9 @@ int run_event_loop()
                         perror("accept");
                         break;
                     }
+                    if (reject_if_server_at_capacity(cfd))
+                        continue;
+
                     set_nonblocking(cfd);
 
                     if (server.socket_domain == TCP_IP) {
@@ -119,6 +149,9 @@ int run_event_loop()
                     }
 
                     client_t *c = init_client(cfd, ss, server.socket_domain);
+                    if (!c) {
+                        continue;
+                    }
 
                     server.clients = listAddNodeToTail(server.clients, c);
                     server.num_clients += 1;
@@ -148,8 +181,8 @@ int run_event_loop()
             // Fallback: if udata is missing, find by fd (kept for
             // compatibility).
             if (!c) {
-                const list_node_t *node = listFindNode(
-                    server.clients, NULL, (void *)(intptr_t)ident_fd);
+                const list_node_t *node =
+                    listFindNodeByFd(server.clients, ident_fd);
                 c = node ? (client_t *)node->val : NULL;
                 if (!c) {
                     // Unknown fd; close it defensively.
@@ -158,12 +191,30 @@ int run_event_loop()
                 }
             }
 
+            if (evs[i].filter == EVFILT_WRITE) {
+                wbuf_flush(c);
+                if (c->write_failed ||
+                    sync_client_write_interest(kq, c) == -1) {
+                    close_and_drop_client(kq, c);
+                    for (int j = i + 1; j < n; j++) {
+                        if (evs[j].udata == c)
+                            evs[j].udata = NULL;
+                    }
+                }
+                continue;
+            }
+
             // Did peer hangup?
             if (evs[i].flags & EV_EOF) {
                 if (server.verbose) {
                     printf("Client fd=%d closed (EV_EOF)\n", c->fd);
                 }
                 close_and_drop_client(kq, c);
+                // Invalidate stale events referencing the freed client
+                for (int j = i + 1; j < n; j++) {
+                    if (evs[j].udata == c)
+                        evs[j].udata = NULL;
+                }
                 continue;
             }
 
@@ -179,7 +230,14 @@ int run_event_loop()
                     }
 
                     // Process all complete frames currently in buffer
-                    try_process_frames(c);
+                    if (try_process_frames(c) < 0) {
+                        close_and_drop_client(kq, c);
+                        for (int j = i + 1; j < n; j++) {
+                            if (evs[j].udata == c)
+                                evs[j].udata = NULL;
+                        }
+                        break;
+                    }
 
                     // If the buffer is full, but we still need more for a frame
                     // → protocol error.
@@ -190,6 +248,10 @@ int run_event_loop()
                                 "client\n",
                                 c->fd);
                         close_and_drop_client(kq, c);
+                        for (int j = i + 1; j < n; j++) {
+                            if (evs[j].udata == c)
+                                evs[j].udata = NULL;
+                        }
                         break;
                     }
 
@@ -202,11 +264,22 @@ int run_event_loop()
                         printf("Client fd=%d closed (recv=0)\n", c->fd);
                     }
                     close_and_drop_client(kq, c);
+                    for (int j = i + 1; j < n; j++) {
+                        if (evs[j].udata == c)
+                            evs[j].udata = NULL;
+                    }
                     break;
                 }
 
                 if (errno == EAGAIN || errno == EWOULDBLOCK) {
                     // No more data for now
+                    if (sync_client_write_interest(kq, c) == -1) {
+                        close_and_drop_client(kq, c);
+                        for (int j = i + 1; j < n; j++) {
+                            if (evs[j].udata == c)
+                                evs[j].udata = NULL;
+                        }
+                    }
                     break;
                 }
                 if (errno == EINTR) {
@@ -216,6 +289,10 @@ int run_event_loop()
 
                 perror("recv");
                 close_and_drop_client(kq, c);
+                for (int j = i + 1; j < n; j++) {
+                    if (evs[j].udata == c)
+                        evs[j].udata = NULL;
+                }
                 break;
             }
         }

@@ -7,14 +7,33 @@
 #include "../../utils.h"
 
 #include <assert.h>
+#include <ctype.h>
 #include <errno.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/socket.h>
 
 #define MAX_KEY_LEN 512
 #define MAX_VALUE_LEN 512
+
+static bool command_equals(const char *input, const char *expected)
+{
+    while (isspace((unsigned char)*input))
+        input++;
+
+    size_t input_len = strlen(input);
+    while (input_len > 0 &&
+           isspace((unsigned char)input[input_len - 1])) {
+        input_len--;
+    }
+
+    const size_t expected_len = strlen(expected);
+    return input_len == expected_len &&
+           strncasecmp(input, expected, expected_len) == 0;
+}
 
 void cmd_get(const command_args_t args, void (*response_cb)(client_t *client))
 {
@@ -387,7 +406,7 @@ void cmd_persist(const command_args_t args, void (*response_cb)(client_t *client
 
 void cmd_keys(const command_args_t args, void (*response_cb)(client_t *client))
 {
-    if (strncasecmp(args.cmd, "KEYS", 4) != 0) {
+    if (!command_equals(args.cmd, "KEYS")) {
         return;
     }
 
@@ -414,6 +433,8 @@ void cmd_keys(const command_args_t args, void (*response_cb)(client_t *client))
 void cmd_unknown(const command_args_t args,
                  void (*response_cb)(client_t *client))
 {
+    (void)response_cb;
+
     if (strncmp(args.cmd, "INCR ", 5) &&
         strncmp(args.cmd, "INCRBY ", 6) &&
         strncmp(args.cmd, "GET ", 4) &&
@@ -427,7 +448,7 @@ void cmd_unknown(const command_args_t args,
         strncmp(args.cmd, "TTL ", 4) &&
         strncmp(args.cmd, "PERSIST ", 8) &&
         strncmp(args.cmd, "INFO", 5) &&
-        strncmp(args.cmd, "KEYS", 4)) {
+        !command_equals(args.cmd, "KEYS")) {
         printf("Unknown command \n");
     }
 }
@@ -447,7 +468,7 @@ void execute_command(const char *cmd, client_t *client,
                      void (*response_cb)(client_t *client))
 {
     const command_args_t args = {.cmd = cmd, .client = client};
-    for (int i = 0; i < ARRAY_SIZE(command_table); i++) {
+    for (size_t i = 0; i < ARRAY_SIZE(command_table); i++) {
         command_table[i].cmd_fn(args, response_cb);
     }
 }

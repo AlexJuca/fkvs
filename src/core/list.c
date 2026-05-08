@@ -1,4 +1,5 @@
 #include "../core/list.h"
+#include "../client.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -154,4 +155,15 @@ void listLinkNodeToHead(list_t *list, list_node_t *node)
         list->head = node;
     }
     list->len++;
+}
+
+list_node_t *listFindNodeByFd(list_t *list, int fd)
+{
+    list_node_t *node = list->head;
+    while (node) {
+        if (((client_t *)node->val)->fd == fd)
+            return node;
+        node = node->next;
+    }
+    return NULL;
 }

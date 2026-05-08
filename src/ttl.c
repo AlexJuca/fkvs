@@ -25,12 +25,11 @@ static bool get_deadline(hashtable_t *expires, const unsigned char *key,
     value_entry_t *val = NULL;
     size_t val_len = 0;
 
-    if (!get_value(expires, (unsigned char *)key, key_len, &val, &val_len))
+    if (!get_value(expires, key, key_len, &val, &val_len))
         return false;
 
     if (val_len != 8) {
-        free(val->ptr);
-        free(val);
+        free_value_entry(val);
         return false;
     }
 
@@ -40,8 +39,7 @@ static bool get_deadline(hashtable_t *expires, const unsigned char *key,
                     ((int64_t)b[4] << 24) | ((int64_t)b[5] << 16) |
                     ((int64_t)b[6] << 8) | (int64_t)b[7];
 
-    free(val->ptr);
-    free(val);
+    free_value_entry(val);
     return true;
 }
 

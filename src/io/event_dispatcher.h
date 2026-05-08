@@ -9,7 +9,7 @@ typedef enum event_loop_dispatcher_kind {
     io_uring_kind
 } event_loop_dispatcher_kind;
 
-static char *
+static inline const char *
 event_loop_dispatcher_kind_to_string(const event_loop_dispatcher_kind kind)
 {
     switch (kind) {

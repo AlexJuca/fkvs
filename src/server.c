@@ -5,6 +5,7 @@
 #include "counter.h"
 #include "io/event_dispatcher.h"
 #include "networking/networking.h"
+#include "server_lifecycle.h"
 #include "utils.h"
 #include <errno.h>
 #include <fcntl.h>
@@ -82,26 +83,20 @@ void print_version_and_exit()
     exit(1);
 }
 
-void handle_sigint(int sig)
+static void install_signal_handlers(void)
 {
-    LOG_INFO("Caught signal interrupt, shutting down server.");
-    // Ensure we close all client connections
-    const list_node_t *current = server.clients->head;
-    while (current != NULL) {
-        close((intptr_t)current->val);
-        current = current->next;
-    }
+    struct sigaction shutdown_action;
+    memset(&shutdown_action, 0, sizeof(shutdown_action));
+    shutdown_action.sa_handler = request_server_shutdown;
+    sigemptyset(&shutdown_action.sa_mask);
+    sigaction(SIGINT, &shutdown_action, NULL);
+    sigaction(SIGTERM, &shutdown_action, NULL);
 
-    listEmpty(server.clients);
-    server.num_clients = 0;
-
-    free(server.database->expires);
-    free(server.database->store);
-    free(server.database);
-
-    close(server.fd);
-    close(server.event_loop_fd);
-    exit(EXIT_SUCCESS);
+    struct sigaction pipe_action;
+    memset(&pipe_action, 0, sizeof(pipe_action));
+    pipe_action.sa_handler = SIG_IGN;
+    sigemptyset(&pipe_action.sa_mask);
+    sigaction(SIGPIPE, &pipe_action, NULL);
 }
 
 void setup_client_list()
@@ -125,7 +120,13 @@ int main(int argc, char *argv[])
 
     server = load_server_config(config_path);
     server.pid = getpid();
-    server.metrics = *init_counter();
+    counter_t *metrics = init_counter();
+    if (!metrics) {
+        fprintf(stderr, "Failed to initialize server metrics\n");
+        exit(EXIT_FAILURE);
+    }
+    server.metrics = *metrics;
+    free(metrics);
 
     for (int i = 0; i < argc; i++) {
         if (strcmp("-h", argv[i]) == 0 || strcmp("--help", argv[i]) == 0) {
@@ -158,7 +159,7 @@ int main(int argc, char *argv[])
     }
 
     setup_client_list();
-    signal(SIGINT, handle_sigint);
+    install_signal_handlers();
 
     if (server.socket_domain == UNIX) {
         server.fd = start_uds_server();
@@ -193,7 +194,8 @@ int main(int argc, char *argv[])
     "Platform not supported: io_uring currently supports only Linux and macOS uses kqueue."
 #endif
 
-    server.event_loop_fd = run_event_loop();
+    const int event_loop_result = run_event_loop();
+    shutdown_server(&server);
 
-    return 0;
+    return event_loop_result == 0 ? 0 : 1;
 }

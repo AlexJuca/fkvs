@@ -29,10 +29,11 @@ typedef struct hashtable {
 
 hashtable_t *create_hash_table(size_t size);
 void free_hash_table(hashtable_t *table);
+void free_value_entry(value_entry_t *value);
 bool set_value(const hashtable_t *table, const unsigned char *key,
                size_t key_len, const void *value, size_t value_len,
                int value_type);
-bool get_value(hashtable_t *table, unsigned char *key, size_t key_len,
+bool get_value(hashtable_t *table, const unsigned char *key, size_t key_len,
                value_entry_t **value, size_t *value_len);
 bool delete_value(hashtable_t *table, const unsigned char *key, size_t key_len);
 size_t hash_function(const unsigned char *key, size_t key_len,
