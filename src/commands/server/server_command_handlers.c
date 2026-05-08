@@ -1044,7 +1044,7 @@ void handle_keys_command(client_t *client, unsigned char *buffer,
             used += num_len;
             memcpy(buf + used, entry->key, entry->key_len);
             used += entry->key_len;
-            buf[used] = '\n';
+            buf[used] = '\0';
             used++;
 
             count++;
