@@ -22,3 +22,5 @@ CTestTestfile.cmake
 .ninja_log
 build.ninja
 .cmake/
+.zig-cache/
+zig-out/

@@ -71,6 +71,22 @@ make -f Makefile.fkvs setup-and-build
 ./fkvs-server -c
 ```
 
+### Build and test with Zig 0.15.2
+
+```shell
+zig version # must print 0.15.2
+zig build
+zig build test
+zig build -Dsanitizers=true test
+```
+
+On Linux, the Zig build uses the epoll server backend by default. To build the
+io_uring backend, install liburing and run:
+
+```shell
+zig build -Dio-uring=true
+```
+
 ### Running the client
 
 ```shell
@@ -150,4 +166,3 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
-
