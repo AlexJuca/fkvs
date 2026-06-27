@@ -704,7 +704,7 @@ void handle_info_command(client_t *client, unsigned char *buffer,
         return;
     }
 
-    send_reply(client, (const unsigned char *)metrics, n);
+    send_info_reply(client, (const unsigned char *)metrics, n);
 }
 
 void handle_decr_command(client_t *client, unsigned char *buffer,
@@ -1055,7 +1055,8 @@ void handle_keys_command(client_t *client, unsigned char *buffer,
     if (count == 0) {
         send_keys_reply(client, (const unsigned char *)"", 0);
     } else {
-        send_keys_reply(client, (const unsigned char *)buf, used);
+        // Newlines separate entries; drop the trailing one after the last key.
+        send_keys_reply(client, (const unsigned char *)buf, used - 1);
     }
 
     free(buf);
