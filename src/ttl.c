@@ -2,8 +2,8 @@
 #include "utils.h"
 #include <string.h>
 
-bool set_expiry(hashtable_t *expires, const unsigned char *key,
-                size_t key_len, int64_t deadline_ms)
+bool set_expiry(hashtable_t *expires, const unsigned char *key, size_t key_len,
+                int64_t deadline_ms)
 {
     unsigned char buf[8];
     buf[0] = (deadline_ms >> 56) & 0xFF;
@@ -49,8 +49,7 @@ bool remove_expiry(hashtable_t *expires, const unsigned char *key,
     return delete_value(expires, key, key_len);
 }
 
-bool is_expired(hashtable_t *expires, const unsigned char *key,
-                size_t key_len)
+bool is_expired(hashtable_t *expires, const unsigned char *key, size_t key_len)
 {
     int64_t deadline;
     if (!get_deadline(expires, key, key_len, &deadline))
@@ -59,8 +58,7 @@ bool is_expired(hashtable_t *expires, const unsigned char *key,
     return deadline <= fkvs_now_ms();
 }
 
-int64_t get_ttl(hashtable_t *expires, const unsigned char *key,
-                size_t key_len)
+int64_t get_ttl(hashtable_t *expires, const unsigned char *key, size_t key_len)
 {
     int64_t deadline;
     if (!get_deadline(expires, key, key_len, &deadline))
@@ -80,9 +78,18 @@ size_t expire_sweep(hashtable_t *store, hashtable_t *expires,
     size_t deleted = 0;
     const int64_t now = fkvs_now_ms();
 
+    // Treat both sub-tables as one contiguous bucket space so a resize in
+    // progress is sampled too (size[1] is 0 when not resizing).
+    const size_t total = expires->size[0] + expires->size[1];
+    if (total == 0)
+        return 0;
+
     for (size_t i = 0; i < sample_count; i++) {
-        size_t idx = (cursor + i) % expires->size;
-        hash_table_entry_t *entry = expires->buckets[idx];
+        const size_t pos = (cursor + i) % total;
+        hash_table_entry_t *entry =
+            pos < expires->size[0]
+                ? expires->buckets[0][pos]
+                : expires->buckets[1][pos - expires->size[0]];
 
         while (entry) {
             hash_table_entry_t *next = entry->next;
@@ -106,6 +113,6 @@ size_t expire_sweep(hashtable_t *store, hashtable_t *expires,
         }
     }
 
-    cursor = (cursor + sample_count) % expires->size;
+    cursor = (cursor + sample_count) % total;
     return deleted;
 }
