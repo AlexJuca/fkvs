@@ -64,8 +64,8 @@ static void print_usage_and_exit(const char *prog)
             "  -u       connect via unix domain socket \n"
             "  -t       type of command to use during benchmark (ping, "
             "set, default ping) \n"
-            "  -r       use random non-pregenerated keys for all insertion "
-            "commands (set, setx, etc)\n"
+            "  -r       use a unique key per insertion command (set, setx, "
+            "etc) instead of reusing a fixed key\n"
             "  -P N     pipeline N commands per batch (default 1, no "
             "pipelining)",
             prog);
