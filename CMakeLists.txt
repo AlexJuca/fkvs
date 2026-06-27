@@ -18,7 +18,15 @@ option(FKVS_ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSani
 option(FKVS_ENABLE_IO_URING "Enable io_uring server backend when liburing is available" ON)
 set(FKVS_HAVE_IO_URING FALSE)
 
-option(FKVS_ENABLE_JEMALLOC "Link the server against jemalloc as its allocator" OFF)
+# Default to jemalloc on Linux (falls back to the system allocator if the
+# library is not installed); opt-in elsewhere.
+if(LINUX)
+  set(FKVS_JEMALLOC_DEFAULT ON)
+else()
+  set(FKVS_JEMALLOC_DEFAULT OFF)
+endif()
+option(FKVS_ENABLE_JEMALLOC "Link the server against jemalloc when available"
+       ${FKVS_JEMALLOC_DEFAULT})
 
 function(fkvs_configure_target target_name)
   target_compile_definitions(${target_name} PRIVATE _POSIX_C_SOURCE=200809L)
@@ -79,7 +87,7 @@ if(FKVS_ENABLE_JEMALLOC AND TARGET fkvs-server)
     target_compile_definitions(fkvs-server PRIVATE FKVS_HAVE_JEMALLOC)
     message(STATUS "fkvs: jemalloc enabled (${JEMALLOC_LIBRARY})")
   else()
-    message(FATAL_ERROR "FKVS_ENABLE_JEMALLOC=ON but the jemalloc library was not found")
+    message(STATUS "fkvs: jemalloc requested but not found; using the system allocator")
   endif()
 endif()
 

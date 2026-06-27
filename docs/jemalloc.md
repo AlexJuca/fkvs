@@ -3,8 +3,12 @@
 fkvs can link `fkvs-server` against [jemalloc](https://jemalloc.net/) instead of
 the system allocator. jemalloc is linked **unprefixed**, so it transparently
 overrides `malloc`/`free`/`realloc` — no source changes or call-site edits are
-required. The feature is **opt-in** and **off by default**; the default build
-keeps using the platform's libc allocator.
+required.
+
+**Defaults:** jemalloc is enabled **by default on Linux** and falls back to the
+system allocator if the library is not installed (the build never fails on a
+missing jemalloc). On other platforms (e.g. macOS) it is **opt-in / off by
+default**. Either way, `FKVS_ENABLE_JEMALLOC` lets you force it on or off.
 
 ## When to use it
 
@@ -29,8 +33,10 @@ Enable it for write-heavy, large-keyspace deployments; leave it off otherwise.
 | macOS (Homebrew) | `brew install jemalloc` |
 
 The build looks for the `jemalloc` library via CMake's `find_library`. If
-`FKVS_ENABLE_JEMALLOC=ON` is set but the library is not found, configuration
-fails with a clear error.
+jemalloc is enabled but the library is not found, the build prints a status
+message and falls back to the system allocator (it does **not** fail). On Linux,
+installing `libjemalloc-dev` is therefore all that is needed to get jemalloc by
+default.
 
 ## Build
 
@@ -39,21 +45,27 @@ CMake option.
 
 ### Using the Makefile shortcut
 
-`Makefile.fkvs` forwards a `JEMALLOC` variable to the CMake option (default
-`OFF`), so the usual one-liner can enable it:
+`Makefile.fkvs` defers to the CMake default (jemalloc on Linux, off elsewhere)
+unless you set `JEMALLOC` explicitly:
 
 ```shell
+make -f Makefile.fkvs setup-and-build            # Linux: jemalloc if installed
 make -f Makefile.fkvs setup-and-build JEMALLOC=ON
+make -f Makefile.fkvs setup-and-build JEMALLOC=OFF
 ```
 
 ### Linux
 
+jemalloc is the default here — just install the library and build:
+
 ```shell
 sudo apt install libjemalloc-dev          # or your distro's equivalent
 
-cmake -S . -B . -DFKVS_ENABLE_JEMALLOC=ON
+cmake -S . -B .
 cmake --build .
 ```
+
+Pass `-DFKVS_ENABLE_JEMALLOC=OFF` to force the system allocator instead.
 
 ### macOS
 
@@ -106,21 +118,20 @@ MALLOC_CONF=stats_print:true ./fkvs-server -c server.conf
 
 ## Docker
 
-The `Dockerfile` installs jemalloc and exposes an `ENABLE_JEMALLOC` build arg
-(default `OFF`):
+The `Dockerfile` (Linux) installs jemalloc and builds with it by default,
+exposing an `ENABLE_JEMALLOC` build arg (default `ON`):
 
 ```shell
-# Default image — system allocator
+# Default image — jemalloc
 docker build -t fkvs:latest -f Dockerfile .
 
-# jemalloc image
-docker build --build-arg ENABLE_JEMALLOC=ON -t fkvs:jemalloc -f Dockerfile .
+# System-allocator image
+docker build --build-arg ENABLE_JEMALLOC=OFF -t fkvs:system -f Dockerfile .
 ```
 
 ## Disabling
 
-jemalloc is off by default. To explicitly reconfigure an existing build tree
-back to the system allocator:
+To force the system allocator (e.g. on Linux, where jemalloc is the default):
 
 ```shell
 cmake -S . -B . -DFKVS_ENABLE_JEMALLOC=OFF

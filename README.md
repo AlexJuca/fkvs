@@ -71,22 +71,25 @@ make -f Makefile.fkvs setup-and-build
 ./fkvs-server -c
 ```
 
-### Building with jemalloc (optional)
+### Allocator (jemalloc)
 
-The server can be linked against [jemalloc](https://jemalloc.net/) instead of
-the system allocator. It is off by default and benefits allocation-heavy
-workloads (many distinct keys / high write churn).
+The server uses [jemalloc](https://jemalloc.net/) **by default on Linux** when
+the library is installed, falling back to the system allocator otherwise. It
+benefits allocation-heavy workloads (many distinct keys / high write churn).
 
 ```shell
-# Linux:  sudo apt install libjemalloc-dev
-# macOS:  brew install jemalloc
+# Linux: install jemalloc, then build normally — it is picked up automatically
+sudo apt install libjemalloc-dev
+make -f Makefile.fkvs setup-and-build
 
-cmake -S . -B . -DFKVS_ENABLE_JEMALLOC=ON
+# Force on/off anywhere (e.g. opt in on macOS, opt out on Linux)
+cmake -S . -B . -DFKVS_ENABLE_JEMALLOC=ON   # or =OFF
 cmake --build .
 ```
 
-See the [jemalloc Build Guide](docs/jemalloc.md) for verification, Docker, and
-when it is worth enabling.
+On macOS (and other non-Linux platforms) jemalloc is opt-in. See the
+[jemalloc Build Guide](docs/jemalloc.md) for verification, Docker, and when it
+is worth enabling.
 
 ### Running the client
 

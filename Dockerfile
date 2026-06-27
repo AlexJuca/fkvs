@@ -16,7 +16,7 @@ RUN apt-get update; \
 
 WORKDIR /src
 COPY . .
-ARG ENABLE_JEMALLOC=OFF
+ARG ENABLE_JEMALLOC=ON
 RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DFKVS_ENABLE_JEMALLOC=${ENABLE_JEMALLOC}; \
     cmake --build build -j;
 
