@@ -71,6 +71,23 @@ make -f Makefile.fkvs setup-and-build
 ./fkvs-server -c
 ```
 
+### Building with jemalloc (optional)
+
+The server can be linked against [jemalloc](https://jemalloc.net/) instead of
+the system allocator. It is off by default and benefits allocation-heavy
+workloads (many distinct keys / high write churn).
+
+```shell
+# Linux:  sudo apt install libjemalloc-dev
+# macOS:  brew install jemalloc
+
+cmake -S . -B . -DFKVS_ENABLE_JEMALLOC=ON
+cmake --build .
+```
+
+See the [jemalloc Build Guide](docs/jemalloc.md) for verification, Docker, and
+when it is worth enabling.
+
 ### Running the client
 
 ```shell
@@ -121,6 +138,7 @@ $ ./fkvs-cli -h 127.0.0.1 -p 5995 --non-interactive
 ## Documentation
 
 - [Benchmarking Guide](docs/benchmarking.md) - How to benchmark FKVS performance
+- [jemalloc Build Guide](docs/jemalloc.md) - Building the server with jemalloc
 - [Profiling Guide](docs/profiling.md) - Profiling with Instruments on macOS
 - [Performance Roadmap](docs/performance-roadmap.md) - Path to 1M req/s optimization plan
 - [Event Dispatchers](docs/event-dispatchers.md) - Event loop implementations

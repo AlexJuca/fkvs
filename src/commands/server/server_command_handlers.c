@@ -1,5 +1,6 @@
 #include "../../commands/server/server_command_handlers.h"
 #include "../../core/hashtable.h"
+#include "../../memory.h"
 #include "../../numeric_parse.h"
 #include "../../response_defs.h"
 #include "../../ttl.h"
@@ -670,7 +671,7 @@ void handle_info_command(client_t *client, unsigned char *buffer,
     char formatted_uptime[50];
     format_uptime(&server.metrics, formatted_uptime, sizeof(formatted_uptime));
 
-    char metrics[512];
+    char metrics[768];
     int n = snprintf(
         metrics, sizeof(metrics),
         "# Server \n"
@@ -690,13 +691,14 @@ void handle_info_command(client_t *client, unsigned char *buffer,
         "\n"
         "# Memory \n"
         "Memory Usage: %lu bytes (%lu KiB)\n"
+        "mem_allocator: %s \n"
         "\n",
         server.pid, server.port, server.config_file_path, formatted_uptime,
         server.event_loop_max_events,
         event_loop_dispatcher_kind_to_string(server.event_dispatcher_kind),
         server.num_clients, server.metrics.disconnected_clients,
         server.metrics.num_executed_commands, server.metrics.memory_usage,
-        server.metrics.memory_usage / 1024);
+        server.metrics.memory_usage / 1024, get_allocator_name());
     if (n < 0 || (size_t)n >= sizeof(metrics)) {
         fprintf(stderr, "Formatting error or buffer overflow while preparing "
                         "metrics reply.\n");

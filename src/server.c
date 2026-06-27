@@ -4,6 +4,7 @@
 #include "core/list.h"
 #include "counter.h"
 #include "io/event_dispatcher.h"
+#include "memory.h"
 #include "networking/networking.h"
 #include "server_lifecycle.h"
 #include "utils.h"
@@ -193,6 +194,11 @@ int main(int argc, char *argv[])
 #error                                                                         \
     "Platform not supported: io_uring currently supports only Linux and macOS uses kqueue."
 #endif
+
+    char allocator_log[128];
+    snprintf(allocator_log, sizeof(allocator_log), "allocator: %s",
+             get_allocator_name());
+    LOG_INFO(allocator_log);
 
     const int event_loop_result = run_event_loop();
     shutdown_server(&server);
