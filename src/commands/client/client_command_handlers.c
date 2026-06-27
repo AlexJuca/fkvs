@@ -601,89 +601,182 @@ uint64_t recv_pipeline_responses(client_t *client, uint64_t count)
     return received;
 }
 
+typedef enum {
+    CLIENT_RESPONSE_ERROR,
+    CLIENT_RESPONSE_OK,
+    CLIENT_RESPONSE_VALUE,
+    CLIENT_RESPONSE_PONG,
+    CLIENT_RESPONSE_INFO,
+    CLIENT_RESPONSE_KEYS,
+} client_response_kind_t;
+
+typedef struct {
+    client_response_kind_t kind;
+    const unsigned char *payload;
+    size_t payload_len;
+} client_response_t;
+
+static bool decode_value_response(const unsigned char *frame,
+                                  const size_t frame_len,
+                                  const uint16_t core_len,
+                                  const client_response_kind_t kind,
+                                  client_response_t *response)
+{
+    if (core_len < 3 || frame_len < 5)
+        return false;
+
+    const size_t payload_len = ((size_t)frame[3] << 8) | frame[4];
+    if (payload_len != (size_t)core_len - 3)
+        return false;
+    if (frame_len < 5 + payload_len)
+        return false;
+
+    response->kind = kind;
+    response->payload = &frame[5];
+    response->payload_len = payload_len;
+    return true;
+}
+
+static bool decode_response_frame(const unsigned char *frame,
+                                  const size_t frame_len,
+                                  client_response_t *response)
+{
+    if (frame_len < 3)
+        return false;
+
+    const uint16_t core_len = ((uint16_t)frame[0] << 8) | frame[1];
+    const size_t total_len = (size_t)core_len + 2;
+    if (frame_len < total_len)
+        return false;
+
+    const unsigned char response_type = frame[2];
+    if (core_len == 1) {
+        if (response_type == STATUS_FAILURE) {
+            response->kind = CLIENT_RESPONSE_ERROR;
+            response->payload = NULL;
+            response->payload_len = 0;
+            return true;
+        }
+        if (response_type == STATUS_SUCCESS) {
+            response->kind = CLIENT_RESPONSE_OK;
+            response->payload = NULL;
+            response->payload_len = 0;
+            return true;
+        }
+        return false;
+    }
+
+    switch (response_type) {
+    case STATUS_SUCCESS:
+        return decode_value_response(frame, total_len, core_len,
+                                     CLIENT_RESPONSE_VALUE, response);
+    case CMD_PING:
+        return decode_value_response(frame, total_len, core_len,
+                                     CLIENT_RESPONSE_PONG, response);
+    case CMD_INFO:
+        return decode_value_response(frame, total_len, core_len,
+                                     CLIENT_RESPONSE_INFO, response);
+    case CMD_KEYS:
+        return decode_value_response(frame, total_len, core_len,
+                                     CLIENT_RESPONSE_KEYS, response);
+    default:
+        return false;
+    }
+}
+
+static bool recv_exact(const int fd, unsigned char *buffer, const size_t len)
+{
+    size_t used = 0;
+    while (used < len) {
+        const ssize_t n = recv(fd, buffer + used, len - used, 0);
+        if (n > 0) {
+            used += (size_t)n;
+            continue;
+        }
+        if (n < 0 && errno == EINTR)
+            continue;
+        return false;
+    }
+    return true;
+}
+
+static bool read_response(client_t *client, client_response_t *response)
+{
+    if (!recv_exact(client->fd, client->buffer, 2))
+        return false;
+
+    const uint16_t core_len =
+        ((uint16_t)client->buffer[0] << 8) | client->buffer[1];
+    const size_t total_len = (size_t)core_len + 2;
+    if (total_len > BUFFER_SIZE)
+        return false;
+
+    if (!recv_exact(client->fd, client->buffer + 2, core_len))
+        return false;
+
+    return decode_response_frame(client->buffer, total_len, response);
+}
+
+static void print_quoted_payload(const unsigned char *payload,
+                                 const size_t payload_len)
+{
+    printf("\"%.*s\" \n", (int)payload_len, (const char *)payload);
+}
+
+static void print_plain_payload_line(const unsigned char *payload,
+                                     const size_t payload_len)
+{
+    printf("%.*s\n", (int)payload_len, (const char *)payload);
+}
+
+static void print_response(const client_response_t *response,
+                           const bool benchmark_mode)
+{
+    switch (response->kind) {
+    case CLIENT_RESPONSE_ERROR:
+        if (!benchmark_mode)
+            printf("(nil) \n");
+        break;
+    case CLIENT_RESPONSE_OK:
+        if (!benchmark_mode)
+            printf("OK\n");
+        break;
+    case CLIENT_RESPONSE_VALUE:
+        if (benchmark_mode)
+            break;
+        if (response->payload_len == 0) {
+            printf("OK\n");
+        } else {
+            print_quoted_payload(response->payload, response->payload_len);
+        }
+        break;
+    case CLIENT_RESPONSE_PONG:
+        if (benchmark_mode)
+            break;
+        if (response->payload_len == 0) {
+            printf("PONG\n");
+        } else {
+            print_quoted_payload(response->payload, response->payload_len);
+        }
+        break;
+    case CLIENT_RESPONSE_INFO:
+        print_plain_payload_line(response->payload, response->payload_len);
+        break;
+    case CLIENT_RESPONSE_KEYS:
+        if (response->payload_len == 0) {
+            printf("(empty list)\n");
+        } else {
+            print_plain_payload_line(response->payload, response->payload_len);
+        }
+        break;
+    }
+}
+
 void command_response_handler(client_t *client)
 {
-    const int bytes_received =
-        recv(client->fd, client->buffer, BUFFER_SIZE - 1, 0);
-    if (bytes_received > 0) {
-        if (bytes_received >= 2) {
-            const uint16_t core_len =
-                ((uint16_t)client->buffer[0] << 8) | client->buffer[1];
-            if (bytes_received > core_len) {
-                if (client->buffer[2] == STATUS_FAILURE) {
-                    if (!client->benchmark_mode) {
-                        printf("(nil) \n");
-                    }
-                } else if (client->buffer[2] == CMD_INFO) {
-                        const size_t value_len = client->buffer[0] << 8 | client->buffer[1];
-                        char *data = malloc(value_len + 1);
-                        if (data) {
-                            memcpy(data, &client->buffer[5], value_len);
-                            data[value_len] = '\0';
-                            printf("%s\n", data);
-                            free(data);
-                        } else {
-                            printf("Memory allocation failed\n");
-                        }
+    client_response_t response;
+    if (!read_response(client, &response))
+        return;
 
-                    } else if (client->buffer[2] == CMD_KEYS) {
-                        const size_t value_len =
-                            client->buffer[3] << 8 | client->buffer[4];
-                        if (value_len == 0) {
-                            printf("(empty list)\n");
-                        } else {
-                            char *data = malloc(value_len + 1);
-                            if (data) {
-                                memcpy(data, &client->buffer[5], value_len);
-                                data[value_len] = '\0';
-                                printf("%s\n", data);
-                                free(data);
-                            }
-                        }
-
-                    } else if (client->buffer[2] == CMD_PING) {
-                    const size_t value_len =
-                        client->buffer[3] << 8 | client->buffer[4];
-                    if ((int)value_len ==
-                        0) { // if the length of the value relayed
-                        // back to client is 0, we assume no PING received no
-                        // arguments
-                        if (!client->benchmark_mode) {
-                            printf("PONG\n");
-                        }
-                    } else {
-                        char *data = malloc(value_len + 1);
-                        memcpy(data, &client->buffer[5], value_len);
-                        data[value_len] = '\0';
-                        if (!client->benchmark_mode) {
-                            printf("\"%s\" \n", data);
-                        }
-                        free(data);
-                    }
-                } else {
-                    const size_t value_len =
-                        client->buffer[3] << 8 | client->buffer[4];
-                    char *data = malloc(value_len + 1);
-                    memcpy(data, &client->buffer[5], value_len);
-                    data[value_len] = '\0';
-                    if (value_len == 0) {
-                        if (!client->benchmark_mode) {
-                            printf("OK\n");
-                        }
-                    } else {
-                        if (!client->benchmark_mode) {
-                            printf("\"%s\" \n", data);
-                        }
-                    }
-
-                    free(data);
-                }
-            }
-        } else if (bytes_received == 1 ||
-                   (bytes_received >= 3 && client->buffer[2] == STATUS_FAILURE)) {
-            if (!client->benchmark_mode) {
-                printf("(nil) \n");
-            }
-        }
-    }
+    print_response(&response, client->benchmark_mode);
 }
