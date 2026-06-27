@@ -138,6 +138,64 @@ $ ./fkvs-cli -h 127.0.0.1 -p 5995 --non-interactive
 | `INFO` | `INFO` | Display server statistics (uptime, memory, connected clients) |
 | `KEYS` | `KEYS` | List all non-expired stored keys |
 
+## Benchmarks
+
+These figures measure **server-side CPU efficiency** — `fkvs-benchmark` talks to
+the server over loopback TCP on a single machine, so they show how many
+operations one fkvs event-loop core can push, not end-to-end latency over a real
+network.
+
+**Environment**
+
+| | |
+|---|---|
+| Host | Apple M1 Max — 8 performance + 2 efficiency cores, macOS 26.5 |
+| Linux | Ubuntu 24.04 LTS in an OrbStack VM — 10 vCPU, 16 GiB, Linux 6.19, `aarch64` |
+| Build | `-DCMAKE_BUILD_TYPE=Release`, fkvs @ `ab02465` |
+| Allocators | jemalloc 5.3.0 vs system (glibc) malloc |
+| Workload | `fkvs-benchmark`, loopback TCP, `SET` (5-byte value) |
+| Method | best-of-2 per cell (best-of-3 for `-r`); `-n 1,000,000` (`-n 300,000` at `-P 1`) |
+
+> The Linux numbers come from a **virtualized VM on Apple Silicon**, not
+> bare-metal Linux, and loopback TCP removes the network — treat them as
+> **relative**, not absolute. Run-to-run variance is ~10%.
+
+### Throughput vs pipeline depth — `SET` reusing one key (update-in-place)
+
+`fkvs-benchmark -n 1000000 -t set -c 128 -P <P>` — req/s, higher is better:
+
+| Pipeline (`-P`) | epoll · jemalloc | epoll · system | io_uring · jemalloc | io_uring · system |
+|---|---|---|---|---|
+| 1   | 172K  | 202K  | 235K  | 257K  |
+| 8   | 885K  | 899K  | 903K  | 880K  |
+| 32  | 1.65M | 1.52M | 1.53M | 1.58M |
+| 128 | 2.41M | 2.06M | 2.17M | 2.10M |
+
+Connection count (`-c`) had only marginal effect (50–256 within ~10%): the
+single-threaded event loop is already saturated by a handful of pipelined
+clients.
+
+### Throughput with unique keys — `SET -r` (allocation-heavy, every op inserts)
+
+`fkvs-benchmark -n 1000000 -t set -r -c 50 -P 128`, fresh server per run — req/s:
+
+| Backend | jemalloc | system |
+|---|---|---|
+| epoll | 1.62M | 1.66M |
+| io_uring | 1.59M | 1.63M |
+
+### Reading the numbers
+
+- **Pipelining is the dominant lever** — ~12× from `-P 1` to `-P 128`. With deep
+  pipelining the workload becomes CPU/parse-bound on a single core (~2.4M ops/s).
+- **epoll ≈ io_uring** — epoll is marginally ahead at high pipeline depth;
+  io_uring only leads at `-P 1`, its syscall-bound sweet spot.
+- **jemalloc** helps ~10–15% at high pipeline depth on the cache-hot fixed-key
+  path (each `SET` still allocates/frees two small objects) and ~0% on `-r`,
+  which is memory-latency-bound across a large keyspace. Differences at `-P 1`
+  are within noise. jemalloc is the default on Linux — see the
+  [jemalloc Build Guide](docs/jemalloc.md).
+
 ## Documentation
 
 - [Benchmarking Guide](docs/benchmarking.md) - How to benchmark FKVS performance
