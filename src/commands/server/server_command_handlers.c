@@ -704,7 +704,7 @@ void handle_info_command(client_t *client, unsigned char *buffer,
         return;
     }
 
-    send_reply(client, (const unsigned char *)metrics, n);
+    send_info_reply(client, (const unsigned char *)metrics, n);
 }
 
 void handle_decr_command(client_t *client, unsigned char *buffer,

@@ -19,6 +19,8 @@ void send_error(client_t *client);
 void send_reply(client_t *client, const unsigned char *buffer, size_t bytes_read);
 void send_keys_reply(client_t *client, const unsigned char *data,
                      size_t data_len);
+void send_info_reply(client_t *client, const unsigned char *data,
+                     size_t data_len);
 void send_pong(client_t *client, const unsigned char *buffer, size_t bytes_read);
 
 #endif // COMMAND_REGISTRY_H
