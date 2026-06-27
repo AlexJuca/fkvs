@@ -1,5 +1,6 @@
 #include "../../commands/server/server_command_handlers.h"
 #include "../../core/hashtable.h"
+#include "../../memory.h"
 #include "../../numeric_parse.h"
 #include "../../response_defs.h"
 #include "../../ttl.h"
@@ -45,7 +46,8 @@ void init_command_handlers(db_t *db)
     register_command(CMD_KEYS, handle_keys_command);
 }
 
-void handle_set_command(client_t *client, unsigned char *buffer, size_t bytes_read)
+void handle_set_command(client_t *client, unsigned char *buffer,
+                        size_t bytes_read)
 {
     if (server.verbose) {
         printf("Server received %d bytes from client %d \n", (int)bytes_read,
@@ -169,22 +171,22 @@ void handle_set_command(client_t *client, unsigned char *buffer, size_t bytes_re
     }
 
     int64_t parsed_integer;
-    const int value_encoding = fkvs_parse_i64_decimal(
-                                   &buffer[pos_value], value_len, INT64_MIN,
-                                   INT64_MAX, &parsed_integer)
-                                   ? VALUE_ENTRY_TYPE_INT
-                                   : VALUE_ENTRY_TYPE_RAW;
+    const int value_encoding =
+        fkvs_parse_i64_decimal(&buffer[pos_value], value_len, INT64_MIN,
+                               INT64_MAX, &parsed_integer)
+            ? VALUE_ENTRY_TYPE_INT
+            : VALUE_ENTRY_TYPE_RAW;
 
     value_entry_t *old_value = NULL;
     value_entry_t *old_expiry = NULL;
     size_t old_value_len = 0;
     size_t old_expiry_len = 0;
     const bool had_value =
-        has_expiry && get_value(table, &buffer[pos_key], key_len, &old_value,
-                                &old_value_len);
+        has_expiry &&
+        get_value(table, &buffer[pos_key], key_len, &old_value, &old_value_len);
     const bool had_expiry =
-        has_expiry && get_value(expires, &buffer[pos_key], key_len,
-                                &old_expiry, &old_expiry_len);
+        has_expiry && get_value(expires, &buffer[pos_key], key_len, &old_expiry,
+                                &old_expiry_len);
 
     if (!set_value(table, &buffer[pos_key], key_len, &buffer[pos_value],
                    value_len, value_encoding)) {
@@ -230,7 +232,8 @@ void handle_set_command(client_t *client, unsigned char *buffer, size_t bytes_re
     free(data);
 }
 
-void handle_get_command(client_t *client, unsigned char *buffer, size_t bytes_read)
+void handle_get_command(client_t *client, unsigned char *buffer,
+                        size_t bytes_read)
 {
     if (bytes_read < 5) {
         send_error(client);
@@ -670,7 +673,7 @@ void handle_info_command(client_t *client, unsigned char *buffer,
     char formatted_uptime[50];
     format_uptime(&server.metrics, formatted_uptime, sizeof(formatted_uptime));
 
-    char metrics[512];
+    char metrics[768];
     int n = snprintf(
         metrics, sizeof(metrics),
         "# Server \n"
@@ -690,13 +693,14 @@ void handle_info_command(client_t *client, unsigned char *buffer,
         "\n"
         "# Memory \n"
         "Memory Usage: %lu bytes (%lu KiB)\n"
+        "mem_allocator: %s \n"
         "\n",
         server.pid, server.port, server.config_file_path, formatted_uptime,
         server.event_loop_max_events,
         event_loop_dispatcher_kind_to_string(server.event_dispatcher_kind),
         server.num_clients, server.metrics.disconnected_clients,
         server.metrics.num_executed_commands, server.metrics.memory_usage,
-        server.metrics.memory_usage / 1024);
+        server.metrics.memory_usage / 1024, get_allocator_name());
     if (n < 0 || (size_t)n >= sizeof(metrics)) {
         fprintf(stderr, "Formatting error or buffer overflow while preparing "
                         "metrics reply.\n");
@@ -995,60 +999,67 @@ void handle_keys_command(client_t *client, unsigned char *buffer,
     size_t used = 0;
     size_t count = 0;
 
-    for (size_t i = 0; i < table->size; i++) {
-        hash_table_entry_t *entry = table->buckets[i];
-        while (entry) {
-            hash_table_entry_t *next = entry->next;
+    // Scan both sub-tables so keys mid-resize are not missed.
+    for (int t = 0; t < 2; t++) {
+        if (!table->buckets[t])
+            continue;
+        for (size_t i = 0; i < table->size[t]; i++) {
+            hash_table_entry_t *entry = table->buckets[t][i];
+            while (entry) {
+                hash_table_entry_t *next = entry->next;
 
-            if (check_and_expire(entry->key, entry->key_len)) {
-                entry = next;
-                continue;
-            }
-
-            // Format: "N) key\n"
-            char num_buf[24];
-            int num_len = snprintf(num_buf, sizeof(num_buf), "%zu) ", count + 1);
-            if (num_len < 0 || (size_t)num_len >= sizeof(num_buf)) {
-                free(buf);
-                send_error(client);
-                return;
-            }
-
-            size_t line_len = (size_t)num_len + entry->key_len + 1; // +1 for \n
-
-            if (line_len > max_output - used) {
-                free(buf);
-                send_error(client);
-                return;
-            }
-
-            if (used + line_len > capacity) {
-                size_t new_cap = capacity * 2;
-                if (new_cap > max_output) {
-                    new_cap = max_output;
+                if (check_and_expire(entry->key, entry->key_len)) {
+                    entry = next;
+                    continue;
                 }
-                if (new_cap < used + line_len) {
-                    new_cap = used + line_len;
-                }
-                char *tmp = realloc(buf, new_cap);
-                if (!tmp) {
+
+                // Format: "N) key\n"
+                char num_buf[24];
+                int num_len =
+                    snprintf(num_buf, sizeof(num_buf), "%zu) ", count + 1);
+                if (num_len < 0 || (size_t)num_len >= sizeof(num_buf)) {
                     free(buf);
                     send_error(client);
                     return;
                 }
-                buf = tmp;
-                capacity = new_cap;
+
+                size_t line_len =
+                    (size_t)num_len + entry->key_len + 1; // +1 for \n
+
+                if (line_len > max_output - used) {
+                    free(buf);
+                    send_error(client);
+                    return;
+                }
+
+                if (used + line_len > capacity) {
+                    size_t new_cap = capacity * 2;
+                    if (new_cap > max_output) {
+                        new_cap = max_output;
+                    }
+                    if (new_cap < used + line_len) {
+                        new_cap = used + line_len;
+                    }
+                    char *tmp = realloc(buf, new_cap);
+                    if (!tmp) {
+                        free(buf);
+                        send_error(client);
+                        return;
+                    }
+                    buf = tmp;
+                    capacity = new_cap;
+                }
+
+                memcpy(buf + used, num_buf, num_len);
+                used += num_len;
+                memcpy(buf + used, entry->key, entry->key_len);
+                used += entry->key_len;
+                buf[used] = '\n';
+                used++;
+
+                count++;
+                entry = next;
             }
-
-            memcpy(buf + used, num_buf, num_len);
-            used += num_len;
-            memcpy(buf + used, entry->key, entry->key_len);
-            used += entry->key_len;
-            buf[used] = '\n';
-            used++;
-
-            count++;
-            entry = next;
         }
     }
 

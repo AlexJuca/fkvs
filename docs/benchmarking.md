@@ -20,7 +20,7 @@ Usage: fkvs-benchmark [-n total_requests] [-c clients] [-h host] [-p port]
           -u       connect via unix domain socket
           -t       type of command to use during benchmark (ping,
           set, default ping)
-          -r       use random non-pregenerated keys for all insertion commands (set, setx, etc)
+          -r       use a unique key per insertion command (set, setx, etc) instead of reusing a fixed key
 ```
 
 You need to have a running fkvs server instance before launching the benchmark. A typical example would be:

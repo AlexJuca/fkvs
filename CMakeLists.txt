@@ -18,6 +18,16 @@ option(FKVS_ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSani
 option(FKVS_ENABLE_IO_URING "Enable io_uring server backend when liburing is available" ON)
 set(FKVS_HAVE_IO_URING FALSE)
 
+# Default to jemalloc on Linux (falls back to the system allocator if the
+# library is not installed); opt-in elsewhere.
+if(LINUX)
+  set(FKVS_JEMALLOC_DEFAULT ON)
+else()
+  set(FKVS_JEMALLOC_DEFAULT OFF)
+endif()
+option(FKVS_ENABLE_JEMALLOC "Link the server against jemalloc when available"
+       ${FKVS_JEMALLOC_DEFAULT})
+
 function(fkvs_configure_target target_name)
   target_compile_definitions(${target_name} PRIVATE _POSIX_C_SOURCE=200809L)
   target_compile_features(${target_name} PRIVATE c_std_23)
@@ -65,6 +75,20 @@ elseif(LINUX)
   add_executable(fkvs-benchmark src/string_utils.c src/fkvs-benchmark.c src/client.c src/core/list.c src/networking/networking.c src/commands/common/command_parser.c src/commands/client/client_command_handlers.c)
   target_compile_definitions(fkvs-benchmark PRIVATE CLI)
   fkvs_configure_target(fkvs-benchmark)
+endif()
+
+# Optionally link the server against jemalloc. When linked unprefixed, jemalloc
+# transparently overrides malloc/free, so no source changes are required; the
+# FKVS_HAVE_JEMALLOC define only switches the startup allocator banner.
+if(FKVS_ENABLE_JEMALLOC AND TARGET fkvs-server)
+  find_library(JEMALLOC_LIBRARY NAMES jemalloc)
+  if(JEMALLOC_LIBRARY)
+    target_link_libraries(fkvs-server PRIVATE ${JEMALLOC_LIBRARY})
+    target_compile_definitions(fkvs-server PRIVATE FKVS_HAVE_JEMALLOC)
+    message(STATUS "fkvs: jemalloc enabled (${JEMALLOC_LIBRARY})")
+  else()
+    message(STATUS "fkvs: jemalloc requested but not found; using the system allocator")
+  endif()
 endif()
 
 # Add test executable

@@ -4,7 +4,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update; \
     apt-get install -y --no-install-recommends \
       ca-certificates wget gnupg software-properties-common lsb-release \
-      build-essential ninja-build pkg-config; \
+      build-essential ninja-build pkg-config libjemalloc-dev; \
     \
     # Add Kitware APT repo so we use a modern version of CMAKE
     wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc | gpg --dearmor -o /usr/share/keyrings/kitware-archive-keyring.gpg; \
@@ -16,14 +16,15 @@ RUN apt-get update; \
 
 WORKDIR /src
 COPY . .
-RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release; \
+ARG ENABLE_JEMALLOC=ON
+RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DFKVS_ENABLE_JEMALLOC=${ENABLE_JEMALLOC}; \
     cmake --build build -j;
 
 FROM ubuntu:24.04 AS runtime
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update; \
-    apt-get install -y --no-install-recommends ca-certificates netcat-openbsd; \
+    apt-get install -y --no-install-recommends ca-certificates netcat-openbsd libjemalloc2; \
     rm -rf /var/lib/apt/lists/*
 
 ARG UID=10001

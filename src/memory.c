@@ -1,6 +1,30 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#if defined(FKVS_HAVE_JEMALLOC)
+/* Declared here rather than including <jemalloc/jemalloc.h> so the build only
+ * depends on the jemalloc library being linked, not on its headers being
+ * installed. When jemalloc is linked unprefixed it transparently overrides the
+ * system malloc/free, so no allocation call sites need to change. */
+extern int mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp,
+                   size_t newlen);
+
+const char *get_allocator_name(void)
+{
+    const char *version = NULL;
+    size_t sz = sizeof(version);
+    if (mallctl("version", &version, &sz, NULL, 0) == 0 && version) {
+        return version;
+    }
+    return "jemalloc";
+}
+#else
+const char *get_allocator_name(void)
+{
+    return "system (libc malloc)";
+}
+#endif
+
 #if defined(__APPLE__)
 #include <mach/mach.h>
 

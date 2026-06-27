@@ -14,7 +14,7 @@
 #define FKVS_DEFAULT_MAX_CLIENTS 128U
 
 typedef struct {
-#define TABLE_SIZE 8092
+#define TABLE_SIZE 8192
     hashtable_t *store;
     hashtable_t *expires;
 } db_t;

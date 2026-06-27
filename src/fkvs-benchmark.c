@@ -1,5 +1,7 @@
 #include "client.h"
 #include "commands/client/client_command_handlers.h"
+#include "commands/common/command_parser.h"
+#include "keygen.h"
 #include "networking/networking.h"
 
 #include <assert.h>
@@ -64,8 +66,8 @@ static void print_usage_and_exit(const char *prog)
             "  -u       connect via unix domain socket \n"
             "  -t       type of command to use during benchmark (ping, "
             "set, default ping) \n"
-            "  -r       use random non-pregenerated keys for all insertion "
-            "commands (set, setx, etc)\n"
+            "  -r       use a unique key per insertion command (set, setx, "
+            "etc) instead of reusing a fixed key\n"
             "  -P N     pipeline N commands per batch (default 1, no "
             "pipelining)",
             prog);
@@ -161,6 +163,42 @@ static void *worker(void *arg)
         }
     }
 
+    const uint64_t total = w->num_reqs_for_this_thread;
+    const bool is_set = strcasecmp(w->cfg->command_type, "set") == 0;
+
+    // Pre-build every command before the start gate so that key generation and
+    // command allocation are excluded from the timed loop. With unique keys we
+    // need one distinct command per request; otherwise a single command is
+    // reused for all sends. Memory here scales with the request count, which is
+    // the same order as the keyspace the server stores.
+    unsigned char **cmds = NULL; // one per request (unique-key mode)
+    size_t *lens = NULL;
+    unsigned char *single_cmd = NULL; // reused for all sends (fixed key / ping)
+    size_t single_len = 0;
+
+    if (is_set && w->cfg->use_random_keys) {
+        cmds = malloc(total * sizeof(*cmds));
+        lens = malloc(total * sizeof(*lens));
+        if (!cmds || !lens) {
+            fprintf(stderr, "Failed to allocate %llu command slots\n",
+                    (unsigned long long)total);
+            free(cmds);
+            free(lens);
+            w->completed = 0;
+            w->failed = total;
+            return NULL;
+        }
+        for (uint64_t i = 0; i < total; i++) {
+            char key[33];
+            generate_unique_key(key);
+            cmds[i] = construct_set_command(key, "world", &lens[i]);
+        }
+    } else if (is_set) {
+        single_cmd = construct_set_command("hello", "world", &single_len);
+    } else {
+        single_cmd = construct_ping_command("", &single_len);
+    }
+
     // arrive at the start gate
     pthread_mutex_lock(&w->gate->mu);
     w->gate->ready++;
@@ -170,16 +208,20 @@ static void *worker(void *arg)
     pthread_mutex_unlock(&w->gate->mu);
 
     uint64_t ok = 0, ko = 0;
-    uint64_t remaining = w->num_reqs_for_this_thread;
+    uint64_t remaining = total;
+    uint64_t sent = 0;
     const uint64_t pdepth = w->cfg->pipeline_depth;
 
     while (remaining > 0) {
         const uint64_t batch = remaining < pdepth ? remaining : pdepth;
 
-        // Send phase: fire off `batch` commands without waiting for responses
+        // Send phase: fire off `batch` pre-built commands without waiting.
         for (uint64_t j = 0; j < batch; j++) {
-            send_command_benchmark(w->cfg->command_type, &client,
-                                   w->cfg->use_random_keys);
+            const unsigned char *buf = cmds ? cmds[sent] : single_cmd;
+            const size_t len = cmds ? lens[sent] : single_len;
+            sent++;
+            if (buf)
+                send(client.fd, buf, len, 0);
         }
 
         // Recv phase: consume exactly `batch` framed responses
@@ -188,6 +230,14 @@ static void *worker(void *arg)
         ko += (batch - got);
         remaining -= batch;
     }
+
+    if (cmds) {
+        for (uint64_t i = 0; i < total; i++)
+            free(cmds[i]);
+        free(cmds);
+        free(lens);
+    }
+    free(single_cmd);
 
     w->completed = ok;
     w->failed = ko;

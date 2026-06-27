@@ -28,7 +28,14 @@
 server_t server;
 
 /* stub – memory.c is not linked */
-unsigned long get_private_memory_usage_bytes(void) { return 0; }
+unsigned long get_private_memory_usage_bytes(void)
+{
+    return 0;
+}
+const char *get_allocator_name(void)
+{
+    return "system (libc malloc)";
+}
 
 /* ── test fixture ──────────────────────────────────────────────────── */
 
@@ -129,8 +136,8 @@ static void assert_set_ex(fixture_t *f, const char *key, const char *value,
     assert(r > 0 && resp_is_success(resp, r, expected));
 }
 
-static void assert_set_ex_error(fixture_t *f, const char *key, const char *value,
-                                const char *seconds)
+static void assert_set_ex_error(fixture_t *f, const char *key,
+                                const char *value, const char *seconds)
 {
     unsigned char resp[512];
     size_t len;
@@ -254,7 +261,8 @@ static void assert_expire_ok(fixture_t *f, const char *key, const char *seconds)
     assert(r > 0 && resp_is_ok(resp, r));
 }
 
-static void assert_expire_error(fixture_t *f, const char *key, const char *seconds)
+static void assert_expire_error(fixture_t *f, const char *key,
+                                const char *seconds)
 {
     unsigned char resp[512];
     size_t len;
@@ -384,8 +392,6 @@ static void test_decr_auto_creates_key(void)
     teardown(&f);
     printf("  test_decr_auto_creates_key passed.\n");
 }
-
-
 
 static void test_incr_after_set(void)
 {
@@ -884,7 +890,7 @@ static void test_set_ex_zero(void)
 
 /** Dispatch KEYS and return raw response. */
 static ssize_t dispatch_keys(fixture_t *f, unsigned char *resp,
-                              size_t resp_size)
+                             size_t resp_size)
 {
     size_t len;
     unsigned char *cmd = construct_keys_command(&len);
@@ -896,7 +902,7 @@ static ssize_t dispatch_keys(fixture_t *f, unsigned char *resp,
 
 /** Check that a KEYS response has CMD_KEYS tag and the given value_len. */
 static bool resp_is_keys(const unsigned char *resp, ssize_t len,
-                          size_t *out_value_len)
+                         size_t *out_value_len)
 {
     if (len < 5)
         return false;
