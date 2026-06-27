@@ -116,16 +116,9 @@ void handle_set_command(client_t *client, unsigned char *buffer,
         return;
     }
 
-    char *data = malloc(value_len + 1);
-    if (!data) {
-        send_error(client);
-        return;
-    }
-    memcpy(data, &buffer[pos_value], value_len);
-    data[value_len] = '\0';
-
     if (server.verbose) {
-        printf("Wrote value '%s' to database \n", data);
+        printf("Wrote value '%.*s' to database \n", (int)value_len,
+               &buffer[pos_value]);
         printf("Wrote %d bytes to database \n", value_len);
     }
 
@@ -138,7 +131,6 @@ void handle_set_command(client_t *client, unsigned char *buffer,
         if (ex_offset + 2 > bytes_read) {
             send_error(client);
             fprintf(stderr, "Incomplete SET EX: missing ex_len\n");
-            free(data);
             return;
         }
 
@@ -149,7 +141,6 @@ void handle_set_command(client_t *client, unsigned char *buffer,
         if (pos_ex + ex_len > bytes_read) {
             send_error(client);
             fprintf(stderr, "Incomplete SET EX: ex bytes exceed bounds\n");
-            free(data);
             return;
         }
 
@@ -164,7 +155,6 @@ void handle_set_command(client_t *client, unsigned char *buffer,
                                     fkvs_now_ms(), &deadline_ms)) {
             send_error(client);
             fprintf(stderr, "Invalid SET EX ttl value\n");
-            free(data);
             return;
         }
         has_expiry = true;
@@ -194,7 +184,6 @@ void handle_set_command(client_t *client, unsigned char *buffer,
         fprintf(stderr, "Unable to store SET value\n");
         free_value_entry(old_value);
         free_value_entry(old_expiry);
-        free(data);
         return;
     }
 
@@ -218,7 +207,6 @@ void handle_set_command(client_t *client, unsigned char *buffer,
             }
             free_value_entry(old_value);
             free_value_entry(old_expiry);
-            free(data);
             return;
         }
     } else {
@@ -229,7 +217,6 @@ void handle_set_command(client_t *client, unsigned char *buffer,
     send_reply(client, &buffer[pos_value], value_len);
     free_value_entry(old_value);
     free_value_entry(old_expiry);
-    free(data);
 }
 
 void handle_get_command(client_t *client, unsigned char *buffer,

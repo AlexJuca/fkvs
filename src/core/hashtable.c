@@ -217,6 +217,19 @@ bool set_value(hashtable_t *table, const unsigned char *key, size_t key_len,
     const size_t hash = djb2(key, key_len);
     hash_table_entry_t *current = find_entry(table, key, key_len, hash);
 
+    // Fast path: overwrite an existing value of the same length in place, with
+    // no allocation or free. This is the common case for repeated SETs of the
+    // same key (and matches calloc semantics by resetting type/expirable).
+    if (current && current->value && current->value->value_len == value_len) {
+        value_entry_t *v = current->value;
+        if (value_len > 0)
+            memcpy(v->ptr, value, value_len);
+        v->encoding = value_type_encoding;
+        v->type = 0;
+        v->expirable = 0;
+        return true;
+    }
+
     // Build the new value entry up front so an OOM never corrupts the old one.
     value_entry_t *new_val = calloc(1, sizeof(value_entry_t));
     if (!new_val)
