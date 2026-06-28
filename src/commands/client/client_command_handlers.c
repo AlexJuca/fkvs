@@ -2,6 +2,7 @@
 #include "../../client.h"
 #include "../../commands/common/command_defs.h"
 #include "../../commands/common/command_parser.h"
+#include "../../commands/common/command_tokenizer.h"
 #include "../../response_defs.h"
 #include "../../keygen.h"
 #include "../../utils.h"
@@ -41,14 +42,14 @@ void cmd_get(const command_args_t args, void (*response_cb)(client_t *client))
         return;
     }
 
-    char key[MAX_KEY_LEN];
-    if (sscanf(args.cmd, "GET %511s", key) == 1) {
-
-    } else {
+    command_tokens_t tokens;
+    command_tokenize(args.cmd, &tokens);
+    if (tokens.argc != 2) {
         printf("(error) ERR wrong number of arguments for 'get' command\n");
         printf("(info) Usage: GET <key>\n");
         return;
     }
+    const char *key = tokens.argv[1];
 
     size_t cmd_len;
     unsigned char *binary_cmd = construct_get_command(key, &cmd_len);
@@ -71,21 +72,19 @@ void cmd_set(const command_args_t args, void (*response_cb)(client_t *client))
         return;
     }
 
-    char value[MAX_VALUE_LEN];
-    char key[MAX_KEY_LEN];
-    char ex_keyword[4];
-    char seconds[MAX_VALUE_LEN];
-
     size_t cmd_len;
     unsigned char *binary_cmd = NULL;
 
-    int nfields = sscanf(args.cmd, "SET %511s %511s %3s %511s", key, value,
-                         ex_keyword, seconds);
+    /* args.cmd is "SET <key> <value> [EX seconds]"; argv[0] is the verb. */
+    command_tokens_t tokens;
+    command_tokenize(args.cmd, &tokens);
 
-    if (nfields == 4 && strcasecmp(ex_keyword, "EX") == 0) {
-        binary_cmd = construct_set_ex_command(key, value, seconds, &cmd_len);
-    } else if (nfields == 2) {
-        binary_cmd = construct_set_command(key, value, &cmd_len);
+    if (tokens.argc == 3) {
+        binary_cmd = construct_set_command(tokens.argv[1], tokens.argv[2],
+                                           &cmd_len);
+    } else if (tokens.argc == 5 && strcasecmp(tokens.argv[3], "EX") == 0) {
+        binary_cmd = construct_set_ex_command(tokens.argv[1], tokens.argv[2],
+                                              tokens.argv[4], &cmd_len);
     } else {
         printf("(error) ERR syntax error in 'set' command\n");
         printf("(info) Usage: SET <key> <value> [EX seconds]\n");
@@ -111,14 +110,14 @@ void cmd_incr(const command_args_t args, void (*response_cb)(client_t *client))
         return;
     }
 
-    char key[MAX_KEY_LEN];
-    if (sscanf(args.cmd, "INCR %511s", key) == 1) {
-
-    } else {
+    command_tokens_t tokens;
+    command_tokenize(args.cmd, &tokens);
+    if (tokens.argc != 2) {
         printf("(error) ERR wrong number of arguments for 'incr' command\n");
         printf("(info) Usage: INCR <key>\n");
         return;
     }
+    const char *key = tokens.argv[1];
 
     size_t cmd_len;
     unsigned char *binary_cmd = construct_incr_command(key, &cmd_len);
@@ -142,15 +141,15 @@ void cmd_incr_by(const command_args_t args,
         return;
     }
 
-    char key[MAX_KEY_LEN];
-    char value[MAX_VALUE_LEN];
-    if (sscanf(args.cmd, "INCRBY %511s %511s", key, value) == 2) {
-
-    } else {
+    command_tokens_t tokens;
+    command_tokenize(args.cmd, &tokens);
+    if (tokens.argc != 3) {
         printf("(error) ERR wrong number of arguments for 'incrby' command\n");
         printf("(info) Usage: INCRBY <key> <value>\n");
         return;
     }
+    const char *key = tokens.argv[1];
+    const char *value = tokens.argv[2];
 
     size_t cmd_len;
     unsigned char *binary_cmd = construct_incr_by_command(key, value, &cmd_len);
@@ -173,23 +172,17 @@ void cmd_ping(const command_args_t args, void (*response_cb)(client_t *client))
       return;
     }
 
-    char value[MAX_VALUE_LEN];
-    if (sscanf(args.cmd, "PING \"%127[^\"]\"s", value) == 1) {
+    command_tokens_t tokens;
+    command_tokenize(args.cmd, &tokens);
 
-    } else if (strcmp(args.cmd, "PING") == 0) {
-      // TODO: Find a cleaner alternative for this.
-      value[0] = 'P';
-      value[1] = 'O';
-      value[2] = 'N';
-      value[3] = 'G';
-      value[4] = '\0';
-    } else if (sscanf(args.cmd, "PING") == 1) {
-
-    } else if (sscanf(args.cmd, "PING %127s", value) == 1) {
-
+    const char *value;
+    if (tokens.argc == 1) {
+        value = "PONG"; /* bare PING echoes the canonical reply */
+    } else if (tokens.argc == 2) {
+        value = tokens.argv[1];
     } else {
         printf("(error) ERR wrong number of arguments for 'ping' command\n");
-        printf("(info) Usage: PING or PING <key> \n");
+        printf("(info) Usage: PING or PING <value>\n");
         return;
     }
 
@@ -235,14 +228,14 @@ void cmd_decr(const command_args_t args, void (*response_cb)(client_t *client))
         return;
     }
 
-    char key[MAX_KEY_LEN];
-    if (sscanf(args.cmd, "DECR %511s", key) == 1) {
-
-    } else {
+    command_tokens_t tokens;
+    command_tokenize(args.cmd, &tokens);
+    if (tokens.argc != 2) {
         printf("(error) ERR wrong number of arguments for 'decr' command\n");
         printf("(info) Usage: DECR <key>\n");
         return;
     }
+    const char *key = tokens.argv[1];
 
     size_t cmd_len;
     unsigned char *binary_cmd = construct_decr_command(key, &cmd_len);
@@ -266,15 +259,15 @@ void cmd_decr_by(const command_args_t args,
         return;
     }
 
-    char key[MAX_KEY_LEN];
-    char value[MAX_VALUE_LEN];
-    if (sscanf(args.cmd, "DECRBY %511s %511s", key, value) == 2) {
-
-    } else {
+    command_tokens_t tokens;
+    command_tokenize(args.cmd, &tokens);
+    if (tokens.argc != 3) {
         printf("(error) ERR wrong number of arguments for 'decrby' command\n");
         printf("(info) Usage: DECRBY <key> <value>\n");
         return;
     }
+    const char *key = tokens.argv[1];
+    const char *value = tokens.argv[2];
 
     size_t cmd_len;
     unsigned char *binary_cmd = construct_decr_by_command(key, value, &cmd_len);
@@ -297,12 +290,14 @@ void cmd_del(const command_args_t args, void (*response_cb)(client_t *client))
         return;
     }
 
-    char key[MAX_KEY_LEN];
-    if (sscanf(args.cmd, "DEL %511s", key) != 1) {
+    command_tokens_t tokens;
+    command_tokenize(args.cmd, &tokens);
+    if (tokens.argc != 2) {
         printf("(error) ERR wrong number of arguments for 'del' command\n");
         printf("(info) Usage: DEL <key>\n");
         return;
     }
+    const char *key = tokens.argv[1];
 
     size_t cmd_len;
     unsigned char *binary_cmd = construct_del_command(key, &cmd_len);
@@ -325,13 +320,15 @@ void cmd_expire(const command_args_t args, void (*response_cb)(client_t *client)
         return;
     }
 
-    char key[MAX_KEY_LEN];
-    char seconds[MAX_VALUE_LEN];
-    if (sscanf(args.cmd, "EXPIRE %511s %511s", key, seconds) != 2) {
+    command_tokens_t tokens;
+    command_tokenize(args.cmd, &tokens);
+    if (tokens.argc != 3) {
         printf("(error) ERR wrong number of arguments for 'expire' command\n");
         printf("(info) Usage: EXPIRE <key> <seconds>\n");
         return;
     }
+    const char *key = tokens.argv[1];
+    const char *seconds = tokens.argv[2];
 
     size_t cmd_len;
     unsigned char *binary_cmd = construct_expire_command(key, seconds, &cmd_len);
@@ -354,12 +351,14 @@ void cmd_ttl(const command_args_t args, void (*response_cb)(client_t *client))
         return;
     }
 
-    char key[MAX_KEY_LEN];
-    if (sscanf(args.cmd, "TTL %511s", key) != 1) {
+    command_tokens_t tokens;
+    command_tokenize(args.cmd, &tokens);
+    if (tokens.argc != 2) {
         printf("(error) ERR wrong number of arguments for 'ttl' command\n");
         printf("(info) Usage: TTL <key>\n");
         return;
     }
+    const char *key = tokens.argv[1];
 
     size_t cmd_len;
     unsigned char *binary_cmd = construct_ttl_command(key, &cmd_len);
@@ -382,12 +381,14 @@ void cmd_persist(const command_args_t args, void (*response_cb)(client_t *client
         return;
     }
 
-    char key[MAX_KEY_LEN];
-    if (sscanf(args.cmd, "PERSIST %511s", key) != 1) {
+    command_tokens_t tokens;
+    command_tokenize(args.cmd, &tokens);
+    if (tokens.argc != 2) {
         printf("(error) ERR wrong number of arguments for 'persist' command\n");
         printf("(info) Usage: PERSIST <key>\n");
         return;
     }
+    const char *key = tokens.argv[1];
 
     size_t cmd_len;
     unsigned char *binary_cmd = construct_persist_command(key, &cmd_len);
