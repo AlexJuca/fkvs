@@ -164,45 +164,48 @@ int try_process_frames(client_t *c)
     if (server.verbose) {
         printf("Attempting to process frame \n");
     }
+    // Parse forward through the buffer with a cursor and compact only once at
+    // the end, so a deep pipeline does not pay an O(bytes) memmove per frame.
+    size_t pos = 0;
     for (;;) {
-        if (c->buf_used < 2)
+        const size_t avail = c->buf_used - pos;
+        if (avail < 2)
             break; // need length prefix
 
-        if (c->frame_need < 0) {
-            uint16_t core_len = ((uint16_t)c->buffer[0] << 8) | c->buffer[1];
-            c->frame_need =
-                2 + (ssize_t)core_len; // total frame bytes (prefix + core)
-            if ((size_t)c->frame_need > sizeof(c->buffer)) {
-                fprintf(stderr, "Frame too large: %zd > %zu\n", c->frame_need,
-                        sizeof(c->buffer));
-                c->buf_used = 0;
-                c->frame_need = -1;
-                return -1;
-            }
+        const uint16_t core_len =
+            ((uint16_t)c->buffer[pos] << 8) | c->buffer[pos + 1];
+        const size_t frame_len = 2 + (size_t)core_len; // prefix + core
+        if (frame_len > sizeof(c->buffer)) {
+            fprintf(stderr, "Frame too large: %zu > %zu\n", frame_len,
+                    sizeof(c->buffer));
+            c->buf_used = 0;
+            c->frame_need = -1;
+            return -1;
         }
 
-        if ((ssize_t)c->buf_used < c->frame_need)
+        if (avail < frame_len)
             break; // incomplete frame; we wait for more data
-
-        // We have a complete frame.
-        const size_t frame_len = (size_t)c->frame_need;
 
         if (server.verbose) {
             printf("Complete frame (%zu bytes) from fd=%d\n", frame_len, c->fd);
         }
 
         // Dispatch exactly one frame.
-        dispatch_command(c, c->buffer, frame_len);
+        dispatch_command(c, c->buffer + pos, frame_len);
         increment_command_count(&server.metrics);
         if (c->write_failed)
             return -1;
 
-        // Shift any remaining bytes (back-to-back frames).
-        size_t remain = c->buf_used - frame_len;
+        pos += frame_len;
+    }
+
+    // Compact any unparsed remainder to the front of the buffer.
+    if (pos > 0) {
+        const size_t remain = c->buf_used - pos;
         if (remain)
-            memmove(c->buffer, c->buffer + frame_len, remain);
+            memmove(c->buffer, c->buffer + pos, remain);
         c->buf_used = remain;
-        c->frame_need = -1; // recompute for next frame
+        c->frame_need = -1;
     }
 
     // Flush any batched responses after processing all queued frames.
