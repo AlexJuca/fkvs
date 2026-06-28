@@ -229,6 +229,19 @@ bool set_value(hashtable_t *table, const unsigned char *key, size_t key_len,
         v->expirable = 0;
         return true;
     }
+    return NULL;
+}
+
+bool set_value(hashtable_t *table, const unsigned char *key, size_t key_len,
+               const void *value, size_t value_len, int value_type_encoding)
+{
+    if (!table || !table->buckets[0] || table->size[0] == 0 || !key ||
+        (!value && value_len > 0))
+        return false;
+
+    // Advance any in-flight resize by one step on every insert.
+    if (is_rehashing(table))
+        rehash_step(table);
 
     // Build the new value entry up front so an OOM never corrupts the old one.
     value_entry_t *new_val = calloc(1, sizeof(value_entry_t));
@@ -255,6 +268,20 @@ bool set_value(hashtable_t *table, const unsigned char *key, size_t key_len,
         current->value = new_val;
         return true;
     }
+    memcpy(node->key, key, key_len);
+    node->key_len = key_len;
+    node->value = new_val;
+
+    // Insert into the active insertion table: table 1 mid-resize, else table 0.
+    const int t = is_rehashing(table) ? 1 : 0;
+    const size_t idx = fold(hash, table->size[t]);
+    node->next = table->buckets[t][idx];
+    table->buckets[t][idx] = node;
+    table->used[t]++;
+
+    // Grow once the primary table hits load factor 1.0.
+    if (!is_rehashing(table) && table->used[0] >= table->size[0])
+        maybe_start_rehash(table);
 
     // New key: allocate the node and its key.
     hash_table_entry_t *node = malloc(sizeof(*node));
