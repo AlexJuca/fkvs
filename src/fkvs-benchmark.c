@@ -177,8 +177,8 @@ static void *worker(void *arg)
     size_t single_len = 0;
 
     if (is_set && w->cfg->use_random_keys) {
-        cmds = malloc(total * sizeof(*cmds));
-        lens = malloc(total * sizeof(*lens));
+        cmds = calloc(total, sizeof(*cmds));
+        lens = calloc(total, sizeof(*lens));
         if (!cmds || !lens) {
             fprintf(stderr, "Failed to allocate %llu command slots\n",
                     (unsigned long long)total);
