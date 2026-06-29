@@ -64,6 +64,7 @@ Interpretation tips:
   the way high-performance KV stores are benchmarked, rather than a bare peak.
 - Run the client and server on separate machines / pinned to disjoint cores —
   co-locating them on a busy host inflates the tail with client-side scheduling.
+  See [remote-benchmarking.md](remote-benchmarking.md) for the full separate-machine setup.
 
 You need to have a running fkvs server instance before launching the benchmark. A typical example would be:
 
