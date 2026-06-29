@@ -22,24 +22,15 @@ bool set_expiry(hashtable_t *expires, const unsigned char *key, size_t key_len,
 static bool get_deadline(hashtable_t *expires, const unsigned char *key,
                          size_t key_len, int64_t *deadline_out)
 {
-    value_entry_t *val = NULL;
-    size_t val_len = 0;
-
-    if (!get_value(expires, key, key_len, &val, &val_len))
+    const value_entry_t *val = lookup_value(expires, key, key_len);
+    if (!val || val->value_len != 8)
         return false;
-
-    if (val_len != 8) {
-        free_value_entry(val);
-        return false;
-    }
 
     const unsigned char *b = val->ptr;
     *deadline_out = ((int64_t)b[0] << 56) | ((int64_t)b[1] << 48) |
                     ((int64_t)b[2] << 40) | ((int64_t)b[3] << 32) |
                     ((int64_t)b[4] << 24) | ((int64_t)b[5] << 16) |
                     ((int64_t)b[6] << 8) | (int64_t)b[7];
-
-    free_value_entry(val);
     return true;
 }
 

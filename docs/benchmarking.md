@@ -21,7 +21,50 @@ Usage: fkvs-benchmark [-n total_requests] [-c clients] [-h host] [-p port]
           -t       type of command to use during benchmark (ping,
           set, default ping)
           -r       use a unique key per insertion command (set, setx, etc) instead of reusing a fixed key
+          -P N     pipeline N commands per batch (default 1, no pipelining)
+          -R RATE  open-model: drive a constant RATE req/s and report
+                   coordinated-omission-corrected latency (overrides -P)
 ```
+
+## Throughput mode vs. open-model latency mode
+
+By default the benchmark is **closed-loop**: each client sends, waits for the
+reply, then sends again (optionally pipelined with `-P`). This measures peak
+throughput, but it **hides tail latency** — when the server stalls, a closed-loop
+client simply stops sending, so the requests that *would* have queued during the
+stall are never measured (this is *coordinated omission*).
+
+`-R RATE` switches to an **open-model** load: each client sends on a fixed
+schedule regardless of when responses come back, and every request's latency is
+measured from the time it *should* have been sent. Stalls therefore surface as a
+growing backlog of late requests instead of being silently skipped. Latencies are
+recorded in an HdrHistogram and reported as percentiles.
+
+```shell
+# Drive a constant 50k req/s of SET across 16 clients and report latency.
+./fkvs-benchmark -h 127.0.0.1 -p 5995 -c 16 -t set -R 50000 -n 200000
+```
+
+```text
+Open-model latency (coordinated-omission corrected):
+  Target rate : 50000 req/s   Achieved: 49975 req/s
+  Samples     : 200000
+  p50         :      33.0 us
+  p99         :     120.0 us
+  p99.9       :    2238.0 us
+  max         :    2550.0 us
+  mean        :      46.6 us
+```
+
+Interpretation tips:
+- If **Achieved** falls below **Target**, the server cannot sustain that rate —
+  the percentiles will show an exploding tail (often into seconds). Find the
+  highest rate at which p99 stays within your SLO; that is the honest capacity.
+- Report throughput **at a stated latency bound** (e.g. "X req/s at p99 < 1 ms"),
+  the way high-performance KV stores are benchmarked, rather than a bare peak.
+- Run the client and server on separate machines / pinned to disjoint cores —
+  co-locating them on a busy host inflates the tail with client-side scheduling.
+  See [remote-benchmarking.md](remote-benchmarking.md) for the full separate-machine setup.
 
 You need to have a running fkvs server instance before launching the benchmark. A typical example would be:
 

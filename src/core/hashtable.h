@@ -8,6 +8,11 @@
 #define VALUE_ENTRY_TYPE_INT 1
 #define VALUE_ENTRY_TYPE_RAW 2
 
+/*
+ * A value entry owns its bytes inline: `ptr` points just past this header into
+ * the same allocation, so a value costs one malloc and free_value_entry() is a
+ * single free. Do not free `ptr` separately.
+ */
 typedef struct value_entry_t {
     void *ptr;
     unsigned type : 4;
@@ -16,6 +21,12 @@ typedef struct value_entry_t {
     size_t value_len;
 } value_entry_t;
 
+/*
+ * An entry owns its key inline: `key` points just past this header into the same
+ * allocation, so a new key costs one malloc (node+key) and the key never needs a
+ * separate free. The key is immutable for the entry's lifetime, keeping the node
+ * address stable across resizes.
+ */
 typedef struct hashtable_entry_t {
     unsigned char *key;
     size_t key_len;
@@ -53,6 +64,14 @@ bool set_value(hashtable_t *table, const unsigned char *key, size_t key_len,
                const void *value, size_t value_len, int value_type);
 bool get_value(hashtable_t *table, const unsigned char *key, size_t key_len,
                value_entry_t **value, size_t *value_len);
+/*
+ * Borrowing lookup: returns a pointer to the live stored value (no allocation,
+ * no copy), or NULL if absent. The pointer is owned by the table; do NOT free
+ * it, and treat it as invalidated by any later set_value/delete_value/expiry on
+ * the same key. Prefer this over get_value() for read-only access.
+ */
+const value_entry_t *lookup_value(hashtable_t *table, const unsigned char *key,
+                                  size_t key_len);
 bool delete_value(hashtable_t *table, const unsigned char *key, size_t key_len);
 size_t hash_function(const unsigned char *key, size_t key_len,
                      size_t table_size);

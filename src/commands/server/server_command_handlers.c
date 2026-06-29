@@ -243,23 +243,11 @@ void handle_get_command(client_t *client, unsigned char *buffer,
             return;
         }
 
-        value_entry_t *value;
-        size_t value_len;
-        if (get_value(table, &buffer[5], key_len, &value, &value_len)) {
-            unsigned char *resp_buffer = malloc(value->value_len + 1);
-            if (!resp_buffer) {
-                send_error(client);
-                perror("malloc failed");
-                free_value_entry(value);
-                return;
-            }
-
-            memcpy(resp_buffer, value->ptr, value_len);
-
-            resp_buffer[value_len] = '\0';
-            send_reply(client, resp_buffer, value_len);
-            free(resp_buffer);
-            free_value_entry(value);
+        // Zero-copy read: borrow the live value and frame it straight into the
+        // write buffer. The only copy is the unavoidable one into wbuf.
+        const value_entry_t *value = lookup_value(table, &buffer[5], key_len);
+        if (value) {
+            send_reply(client, value->ptr, value->value_len);
         } else {
             send_error(client);
         }
@@ -299,10 +287,10 @@ void handle_incr_command(client_t *client, unsigned char *buffer,
     // Lazy expiry: if expired, treat as nonexistent
     check_and_expire(&buffer[5], key_len);
 
-    value_entry_t *value;
-    size_t value_len;
-
-    if (!get_value(table, &buffer[5], key_len, &value, &value_len)) {
+    // Borrow the live value; read the integer out before the rewrite below
+    // invalidates it.
+    const value_entry_t *value = lookup_value(table, &buffer[5], key_len);
+    if (!value) {
         const char *default_value = "0";
         const size_t default_value_len = strlen(default_value);
         if (!set_value(table, &buffer[5], key_len,
@@ -312,7 +300,8 @@ void handle_incr_command(client_t *client, unsigned char *buffer,
             send_error(client);
             return;
         }
-        if (!get_value(table, &buffer[5], key_len, &value, &value_len)) {
+        value = lookup_value(table, &buffer[5], key_len);
+        if (!value) {
             send_error(client);
             return;
         }
@@ -321,17 +310,15 @@ void handle_incr_command(client_t *client, unsigned char *buffer,
     if (value->encoding != VALUE_ENTRY_TYPE_INT) {
         fprintf(stderr, "Stored value is not an integer.\n");
         send_error(client);
-        free_value_entry(value);
         return;
     }
 
     int64_t current;
-    if (!fkvs_parse_i64_decimal(value->ptr, value_len, INT64_MIN, INT64_MAX,
-                                &current) ||
+    if (!fkvs_parse_i64_decimal(value->ptr, value->value_len, INT64_MIN,
+                                INT64_MAX, &current) ||
         current == INT64_MAX) {
         fprintf(stderr, "Stored integer is out of range.\n");
         send_error(client);
-        free_value_entry(value);
         return;
     }
     const int64_t sum = current + 1;
@@ -343,23 +330,21 @@ void handle_incr_command(client_t *client, unsigned char *buffer,
     char *reply = int64_to_string(sum);
     if (!reply) {
         send_error(client);
-        free_value_entry(value);
         return;
     }
     const size_t reply_len = strlen(reply);
 
+    // Rewrites the key; `value` is invalid from here on.
     if (!set_value(table, &buffer[5], key_len, reply, reply_len,
                    VALUE_ENTRY_TYPE_INT)) {
         fprintf(stderr, "Unable to set incremented value.\n");
         send_error(client);
         free(reply);
-        free_value_entry(value);
         return;
     }
 
     send_reply(client, (const unsigned char *)reply, reply_len);
     free(reply);
-    free_value_entry(value);
 }
 
 void handle_incr_by_command(client_t *client, unsigned char *buffer,
@@ -413,9 +398,10 @@ void handle_incr_by_command(client_t *client, unsigned char *buffer,
     // Lazy expiry: if expired, treat as nonexistent
     check_and_expire(&buffer[5], key_len);
 
-    value_entry_t *old_value;
-    size_t old_value_len;
-    if (!get_value(table, &buffer[5], key_len, &old_value, &old_value_len)) {
+    // Borrow the live value; read the integer out before the rewrite below
+    // invalidates it.
+    const value_entry_t *old_value = lookup_value(table, &buffer[5], key_len);
+    if (!old_value) {
         const char *default_value = "0";
         const size_t default_value_len = strlen(default_value);
         if (!set_value(table, &buffer[5], key_len,
@@ -426,8 +412,8 @@ void handle_incr_by_command(client_t *client, unsigned char *buffer,
             free(incr_str);
             return;
         }
-        if (!get_value(table, &buffer[5], key_len, &old_value,
-                       &old_value_len)) {
+        old_value = lookup_value(table, &buffer[5], key_len);
+        if (!old_value) {
             send_error(client);
             free(incr_str);
             return;
@@ -437,14 +423,13 @@ void handle_incr_by_command(client_t *client, unsigned char *buffer,
     if (old_value->encoding != VALUE_ENTRY_TYPE_INT) {
         fprintf(stderr, "Stored value is not an integer.\n");
         send_error(client);
-        free_value_entry(old_value);
         free(incr_str);
         return;
     }
 
     int64_t current;
     int64_t increment;
-    if (!fkvs_parse_i64_decimal(old_value->ptr, old_value_len, INT64_MIN,
+    if (!fkvs_parse_i64_decimal(old_value->ptr, old_value->value_len, INT64_MIN,
                                 INT64_MAX, &current) ||
         !fkvs_parse_i64_decimal(incr_str, value_length, INT64_MIN, INT64_MAX,
                                 &increment) ||
@@ -452,7 +437,6 @@ void handle_incr_by_command(client_t *client, unsigned char *buffer,
         (increment < 0 && current < INT64_MIN - increment)) {
         fprintf(stderr, "Integer increment is out of range.\n");
         send_error(client);
-        free_value_entry(old_value);
         free(incr_str);
         return;
     }
@@ -465,24 +449,22 @@ void handle_incr_by_command(client_t *client, unsigned char *buffer,
     char *result = int64_to_string(sum);
     if (!result) {
         send_error(client);
-        free_value_entry(old_value);
         free(incr_str);
         return;
     }
     const size_t result_len = strlen(result);
 
+    // Rewrites the key; `old_value` is invalid from here on.
     if (!set_value(table, &buffer[5], key_len, (unsigned char *)result,
                    result_len, VALUE_ENTRY_TYPE_INT)) {
         fprintf(stderr, "Unable to set incremented value.\n");
         send_error(client);
-        free_value_entry(old_value);
         free(incr_str);
         free(result);
         return;
     }
 
     send_reply(client, (unsigned char *)result, result_len);
-    free_value_entry(old_value);
     free(incr_str);
     free(result);
 }
@@ -538,9 +520,10 @@ void handle_decr_by_command(client_t *client, unsigned char *buffer,
     // Lazy expiry: if expired, treat as nonexistent
     check_and_expire(&buffer[5], key_len);
 
-    value_entry_t *old_value;
-    size_t old_value_len;
-    if (!get_value(table, &buffer[5], key_len, &old_value, &old_value_len)) {
+    // Borrow the live value; read the integer out before the rewrite below
+    // invalidates it.
+    const value_entry_t *old_value = lookup_value(table, &buffer[5], key_len);
+    if (!old_value) {
         const char *default_value = "0";
         const size_t default_value_len = strlen(default_value);
         if (!set_value(table, &buffer[5], key_len,
@@ -552,8 +535,8 @@ void handle_decr_by_command(client_t *client, unsigned char *buffer,
             return;
         }
 
-        if (!get_value(table, &buffer[5], key_len, &old_value,
-                       &old_value_len)) {
+        old_value = lookup_value(table, &buffer[5], key_len);
+        if (!old_value) {
             send_error(client);
             free(decr_str);
             return;
@@ -563,14 +546,13 @@ void handle_decr_by_command(client_t *client, unsigned char *buffer,
     if (old_value->encoding != VALUE_ENTRY_TYPE_INT) {
         fprintf(stderr, "Stored value is not an integer.\n");
         send_error(client);
-        free_value_entry(old_value);
         free(decr_str);
         return;
     }
 
     int64_t current;
     int64_t decrement;
-    if (!fkvs_parse_i64_decimal(old_value->ptr, old_value_len, INT64_MIN,
+    if (!fkvs_parse_i64_decimal(old_value->ptr, old_value->value_len, INT64_MIN,
                                 INT64_MAX, &current) ||
         !fkvs_parse_i64_decimal(decr_str, value_length, INT64_MIN, INT64_MAX,
                                 &decrement) ||
@@ -578,7 +560,6 @@ void handle_decr_by_command(client_t *client, unsigned char *buffer,
         (decrement < 0 && current > INT64_MAX + decrement)) {
         fprintf(stderr, "Integer decrement is out of range.\n");
         send_error(client);
-        free_value_entry(old_value);
         free(decr_str);
         return;
     }
@@ -591,24 +572,22 @@ void handle_decr_by_command(client_t *client, unsigned char *buffer,
     char *result = int64_to_string(result_val);
     if (!result) {
         send_error(client);
-        free_value_entry(old_value);
         free(decr_str);
         return;
     }
     const size_t result_len = strlen(result);
 
+    // Rewrites the key; `old_value` is invalid from here on.
     if (!set_value(table, &buffer[5], key_len, (unsigned char *)result,
                    result_len, VALUE_ENTRY_TYPE_INT)) {
         fprintf(stderr, "Unable to set decremented value.\n");
         send_error(client);
-        free_value_entry(old_value);
         free(decr_str);
         free(result);
         return;
     }
 
     send_reply(client, (unsigned char *)result, result_len);
-    free_value_entry(old_value);
     free(decr_str);
     free(result);
 }
@@ -724,9 +703,10 @@ void handle_decr_command(client_t *client, unsigned char *buffer,
     // Lazy expiry: if expired, treat as nonexistent
     check_and_expire(&buffer[5], key_len);
 
-    value_entry_t *value;
-    size_t value_len;
-    if (!get_value(table, &buffer[5], key_len, &value, &value_len)) {
+    // Borrow the live value; read the integer out before the rewrite below
+    // invalidates it.
+    const value_entry_t *value = lookup_value(table, &buffer[5], key_len);
+    if (!value) {
         const char *default_value = "0";
         const size_t default_value_len = strlen(default_value);
         if (!set_value(table, &buffer[5], key_len,
@@ -736,7 +716,8 @@ void handle_decr_command(client_t *client, unsigned char *buffer,
             send_error(client);
             return;
         }
-        if (!get_value(table, &buffer[5], key_len, &value, &value_len)) {
+        value = lookup_value(table, &buffer[5], key_len);
+        if (!value) {
             send_error(client);
             return;
         }
@@ -745,17 +726,15 @@ void handle_decr_command(client_t *client, unsigned char *buffer,
     if (value->encoding != VALUE_ENTRY_TYPE_INT) {
         fprintf(stderr, "Stored value is not an integer.\n");
         send_error(client);
-        free_value_entry(value);
         return;
     }
 
     int64_t current;
-    if (!fkvs_parse_i64_decimal(value->ptr, value_len, INT64_MIN, INT64_MAX,
-                                &current) ||
+    if (!fkvs_parse_i64_decimal(value->ptr, value->value_len, INT64_MIN,
+                                INT64_MAX, &current) ||
         current == INT64_MIN) {
         fprintf(stderr, "Stored integer is out of range.\n");
         send_error(client);
-        free_value_entry(value);
         return;
     }
     const int64_t decrement = current - 1;
@@ -763,22 +742,20 @@ void handle_decr_command(client_t *client, unsigned char *buffer,
     char *result_str = int64_to_string(decrement);
     if (!result_str) {
         send_error(client);
-        free_value_entry(value);
         return;
     }
     const size_t result_length = strlen(result_str);
 
+    // Rewrites the key; `value` is invalid from here on.
     if (!set_value(table, &buffer[5], key_len, (unsigned char *)result_str,
                    result_length, VALUE_ENTRY_TYPE_INT)) {
         fprintf(stderr, "Unable to set decremented value.\n");
         send_error(client);
-        free_value_entry(value);
         free(result_str);
         return;
     }
 
     send_reply(client, (unsigned char *)result_str, result_length);
-    free_value_entry(value);
     free(result_str);
 }
 
@@ -848,14 +825,11 @@ void handle_expire_command(client_t *client, unsigned char *buffer,
         return;
     }
 
-    // Verify key exists in store
-    value_entry_t *val;
-    size_t val_len;
-    if (!get_value(table, &buffer[pos_key], key_len, &val, &val_len)) {
+    // Verify key exists in store (borrow; existence only)
+    if (!lookup_value(table, &buffer[pos_key], key_len)) {
         send_error(client);
         return;
     }
-    free_value_entry(val);
 
     // Parse seconds string
     char sec_buf[32];
@@ -905,13 +879,8 @@ void handle_ttl_command(client_t *client, unsigned char *buffer,
     // Lazy expiry: if expired, clean up before reporting TTL
     check_and_expire(&buffer[5], key_len);
 
-    // Check if key exists in store at all
-    value_entry_t *val;
-    size_t val_len;
-    bool key_exists = get_value(table, &buffer[5], key_len, &val, &val_len);
-    if (key_exists) {
-        free_value_entry(val);
-    }
+    // Check if key exists in store at all (borrow; existence only)
+    bool key_exists = lookup_value(table, &buffer[5], key_len) != NULL;
 
     int64_t ttl;
     if (!key_exists) {
