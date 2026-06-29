@@ -78,12 +78,32 @@ hashtable_t *create_hash_table(const size_t size)
     return table;
 }
 
+// Allocate a value entry with its bytes stored inline in the same block, so a
+// value costs one allocation and free_value_entry() is a single free. `ptr`
+// points just past the header. A trailing NUL is written past value_len as a
+// defensive pad for callers that read values as C strings; value_len stays
+// authoritative (values may be binary).
+static value_entry_t *make_value_entry(const void *value, const size_t value_len,
+                                       const int encoding)
+{
+    value_entry_t *v = malloc(sizeof(*v) + value_len + 1);
+    if (!v)
+        return NULL;
+
+    v->ptr = v + 1; // bytes live immediately after the header
+    v->value_len = value_len;
+    v->encoding = encoding;
+    v->type = 0;
+    v->expirable = 0;
+    if (value_len > 0)
+        memcpy(v->ptr, value, value_len);
+    ((unsigned char *)v->ptr)[value_len] = '\0';
+    return v;
+}
+
 void free_value_entry(value_entry_t *value)
 {
-    if (!value)
-        return;
-
-    free(value->ptr);
+    // Value bytes are inline in the same allocation; one free releases both.
     free(value);
 }
 
@@ -99,9 +119,8 @@ void free_hash_table(hashtable_t *table)
             hash_table_entry_t *entry = table->buckets[t][i];
             while (entry) {
                 hash_table_entry_t *next = entry->next;
-                free(entry->key);
                 free_value_entry(entry->value);
-                free(entry);
+                free(entry); // key is inline in the node allocation
                 entry = next;
             }
         }
@@ -231,22 +250,9 @@ bool set_value(hashtable_t *table, const unsigned char *key, size_t key_len,
     }
 
     // Build the new value entry up front so an OOM never corrupts the old one.
-    value_entry_t *new_val = calloc(1, sizeof(value_entry_t));
+    value_entry_t *new_val = make_value_entry(value, value_len, value_type_encoding);
     if (!new_val)
         return false;
-
-    void *new_ptr = NULL;
-    if (value_len > 0) {
-        new_ptr = malloc(value_len);
-        if (!new_ptr) {
-            free(new_val);
-            return false;
-        }
-        memcpy(new_ptr, value, value_len);
-    }
-    new_val->ptr = new_ptr;
-    new_val->value_len = value_len;
-    new_val->encoding = value_type_encoding;
 
     // Existing key: replace the value in place.
     if (current) {
@@ -256,18 +262,14 @@ bool set_value(hashtable_t *table, const unsigned char *key, size_t key_len,
         return true;
     }
 
-    // New key: allocate the node and its key.
-    hash_table_entry_t *node = malloc(sizeof(*node));
+    // New key: one allocation holds the node and its inline key bytes.
+    const size_t key_alloc = key_len == 0 ? 1 : key_len;
+    hash_table_entry_t *node = malloc(sizeof(*node) + key_alloc);
     if (!node) {
         free_value_entry(new_val);
         return false;
     }
-    node->key = malloc(key_len == 0 ? 1 : key_len);
-    if (!node->key) {
-        free(node);
-        free_value_entry(new_val);
-        return false;
-    }
+    node->key = (unsigned char *)(node + 1); // key lives after the header
     memcpy(node->key, key, key_len);
     node->key_len = key_len;
     node->value = new_val;
@@ -308,9 +310,8 @@ bool delete_value(hashtable_t *table, const unsigned char *key, size_t key_len)
                 } else {
                     table->buckets[t][idx] = current->next;
                 }
-                free(current->key);
                 free_value_entry(current->value);
-                free(current);
+                free(current); // key is inline in the node allocation
                 table->used[t]--;
                 return true;
             }
@@ -339,36 +340,29 @@ bool get_value(hashtable_t *table, const unsigned char *key, size_t key_len,
     if (!current || !current->value)
         return false;
 
-    // allocate full value_entry_t
-    value_entry_t *out = malloc(sizeof(value_entry_t));
+    // Owned snapshot: one allocation with the value bytes inline. Use this only
+    // when the copy must survive a later mutation (see lookup_value() for the
+    // zero-copy read path).
+    const value_entry_t *src = current->value;
+    value_entry_t *out = make_value_entry(src->ptr, src->value_len, src->encoding);
     if (!out)
         return false;
-
-    // Deep copy value bytes. The trailing NUL is only a defensive pad;
-    // value_len remains authoritative because values may be binary.
-    out->ptr = malloc(current->value->value_len + 1);
-    if (!out->ptr) {
-        free(out);
-        return false;
-    }
-
-    if (current->value->value_len > 0) {
-        if (!current->value->ptr) {
-            free_value_entry(out);
-            return false;
-        }
-        memcpy(out->ptr, current->value->ptr, current->value->value_len);
-    }
-    ((unsigned char *)out->ptr)[current->value->value_len] = '\0';
-
-    // copy metadata
-    out->value_len = current->value->value_len;
-    out->encoding = current->value->encoding;
-    out->expirable = current->value->expirable;
-    out->type = current->value->type;
+    out->type = src->type;
+    out->expirable = src->expirable;
 
     *value = out;
     *value_len = out->value_len;
 
     return true;
+}
+
+const value_entry_t *lookup_value(hashtable_t *table, const unsigned char *key,
+                                  const size_t key_len)
+{
+    if (!table || !table->buckets[0] || table->size[0] == 0 || !key)
+        return NULL;
+
+    const size_t hash = djb2(key, key_len);
+    const hash_table_entry_t *e = find_entry(table, key, key_len, hash);
+    return (e && e->value) ? e->value : NULL;
 }
