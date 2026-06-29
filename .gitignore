@@ -22,3 +22,6 @@ CTestTestfile.cmake
 .ninja_log
 build.ninja
 .cmake/
+
+# Local agent skills (not part of the project)
+.agents/
