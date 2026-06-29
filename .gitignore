@@ -25,3 +25,5 @@ build.ninja
 
 # Local agent skills (not part of the project)
 .agents/
+.claude/skills/text-to-lottie
+skills-lock.json
