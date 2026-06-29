@@ -46,3 +46,40 @@ existence checks, and ttl.c `get_deadline`. Removes their per-call alloc+copy+fr
 **D7. Keep owning `get_value()` for SET's TTL-rollback snapshot only.** It reads the
 old value *after* `set_value` may have freed the live entry, so it genuinely needs an
 owned copy. This path is off the hot SET path (only when `EX` is supplied).
+
+## Measured impact
+
+**Environment:** Linux/epoll via OrbStack on Apple Silicon (Ubuntu, Linux 6.19,
+aarch64, 10 vCPU), system allocator, loopback TCP, 5-byte values. Best-of-3.
+`before` = `20b9cc4` (branch base), `after` = `70f2423` (this branch's perf
+commits). Command: `fkvs-benchmark -t set [-r] -c <C> -P <P> -n <N>`.
+
+> Linux/epoll is the representative target. macOS/kqueue is *not* a useful
+> measurement here: the benchmark issues one `send()` per command and macOS
+> syscalls are ~5–6× costlier, so it pins ~0.46–0.59M regardless of server speed
+> (PING ≈ SET confirms it's harness-bound, not server-bound).
+
+| Workload | `-c` | `-P` | before | after | Δ |
+|---|---|---|---|---|---|
+| PING (control, no hashtable) | 128 | 128 | 3,025,635 | 3,234,180 | +6.9% |
+| SET fixed-key (control, in-place, 0 allocs) | 128 | 128 | 3,171,660 | 3,216,862 | +1.4% |
+| SET random-key | 50 | 1 | 229,738 | 242,309 | +5.5% |
+| SET random-key | 50 | 32 | 1,308,548 | 1,305,551 | ~0% |
+| **SET random-key** | **50** | **128** | **1,388,398** | **1,744,866** | **+25.7%** |
+
+**Reading it:** the gain lands on the **allocation-bound new-key path** (random-key
+SET at `-P 128`: **+26%**), exactly what D1/D2 target (4 allocs → 2 per insert).
+The controls behave correctly — fixed-key (in-place fast path, 0 allocs both
+versions) is flat, and PING (no hashtable) moves only with run-to-run variance.
+The PING drift sets the **noise floor at ~±7%** on this VM, so the real win on the
+changed path is ~+18–26%, and it appears *only* on the workload it should.
+
+**Not shown:** the zero-copy GET win (D5: 3 allocs + a leak → 0) — `fkvs-benchmark`
+has no `get` workload, so it isn't in this table; it is covered by the
+sanitizer-clean hashtable tests instead.
+
+**Caveat:** the open-model `-R` latency sweep on a *single* co-located VM is
+rig-limited (~1 ms p99 floor from client/server core contention, ~200K depth-1
+generation ceiling), so absolute latency knees there reflect the test rig, not the
+server. A clean latency-at-rate measurement needs the client on a separate host
+over a low-latency wired/Thunderbolt link (see [remote-benchmarking.md](remote-benchmarking.md)).
