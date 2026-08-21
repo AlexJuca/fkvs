@@ -217,7 +217,7 @@ int try_process_frames(client_t *c)
 #endif
 
 #ifdef CLI
-int start_client(client_t *client)
+int start_tcp_client(client_t *client)
 {
     int client_fd;
     struct sockaddr_in server_addr;

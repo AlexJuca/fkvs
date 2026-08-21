@@ -18,7 +18,7 @@ void set_nonblocking(const int fd);
 #ifdef CLI
 #include "../client.h"
 
-int start_client(client_t *client);
+int start_tcp_client(client_t *client);
 int start_uds_client(client_t *client);
 #endif
 

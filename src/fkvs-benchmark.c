@@ -364,7 +364,7 @@ static void *worker(void *arg)
     if (client.socket_domain == UNIX) {
         fd = start_uds_client(&client);
     } else {
-        fd = start_client(&client);
+        fd = start_tcp_client(&client);
     }
 
     assert(fd != -1);

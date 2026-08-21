@@ -3,7 +3,6 @@
 #include "commands/client/client_command_handlers.h"
 #include "config.h"
 #include "networking/networking.c"
-#include "string_utils.h"
 #include "utils.h"
 #include <ctype.h>
 #include <stdio.h>
@@ -103,7 +102,7 @@ int main(int argc, char *argv[])
     if (client.socket_domain == UNIX) {
         client_fd = start_uds_client(&client);
     } else {
-        client_fd = start_client(&client);
+        client_fd = start_tcp_client(&client);
     }
 
     if (client_fd == -1) {
